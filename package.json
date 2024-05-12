@@ -1,0 +1,27 @@
+{
+  "name": "async-event-channel",
+  "description": "Asynchronous event channels",
+  "private": true,
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jian-qin/async-event-channel.git"
+  },
+  "keywords": [
+    "typescript"
+  ],
+  "author": "jian-qin",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jian-qin/async-event-channel/issues"
+  },
+  "homepage": "https://github.com/jian-qin/async-event-channel#readme"
+}

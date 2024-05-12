@@ -1,0 +1,10 @@
+{
+  "files": ["src/index.ts"],
+  "exclude": ["./dist"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "outDir": "./dist",
+    "declaration": true
+  },
+}
