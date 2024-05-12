@@ -10,7 +10,7 @@
  */
 
 
-type EventChannelOptions = typeof asyncEventChannel['defaultOptions']
+type EventChannelOptions = typeof AsyncEventChannel['defaultOptions']
 export interface WmapValue {
     options: Partial<EventChannelOptions>
     optionsMap: Map<any, Partial<EventChannelOptions>>
@@ -21,11 +21,11 @@ export interface WmapValue {
     onEmitWeakMap: WeakMap<any[], Function>
     promiseEmitWeakMap: WeakMap<Promise<any>, Function>
 }
-type IdThis = ReturnType<InstanceType<typeof asyncEventChannel>['on']> | ReturnType<InstanceType<typeof asyncEventChannel>['emit']>
+type IdThis = ReturnType<InstanceType<typeof AsyncEventChannel>['on']> | ReturnType<InstanceType<typeof AsyncEventChannel>['emit']>
 
 
 let id = 0
-const wmap: WeakMap<InstanceType<typeof asyncEventChannel>, WmapValue> = new WeakMap()
+const wmap: WeakMap<InstanceType<typeof AsyncEventChannel>, WmapValue> = new WeakMap()
 
 /**
  * 获取配置
@@ -37,11 +37,11 @@ const wmap: WeakMap<InstanceType<typeof asyncEventChannel>, WmapValue> = new Wea
  * 配置优先级：事件配置 > 默认配置 > 实例配置
  */
 const getOption = <K extends keyof EventChannelOptions>(
-    ctx: InstanceType<typeof asyncEventChannel>,
+    ctx: InstanceType<typeof AsyncEventChannel>,
     eventName: any,
     key: K
 ) => {
-    const level0 = asyncEventChannel.defaultOptions
+    const level0 = AsyncEventChannel.defaultOptions
     const level1 = wmap.get(ctx)!.options
     const level2 = wmap.get(ctx)!.optionsMap.get(eventName) || {}
     if (Object.prototype.hasOwnProperty.call(level2, key)) {
@@ -54,7 +54,7 @@ const getOption = <K extends keyof EventChannelOptions>(
 }
 
 
-class asyncEventChannel {
+class AsyncEventChannel {
     static defaultOptions = {
         isEmitCache: true,
         isEmitOnce: false,
@@ -348,7 +348,7 @@ class asyncEventChannel {
         const { promiseEmitWeakMap } = wmap.get(this)!
         let cancel: Function | undefined
 
-        const pm = new Promise((resolve, reject) => {
+        const pm: Promise<any> = new Promise((resolve, reject) => {
             let unwatchOff: Function | undefined
             const _idThis = this.onceEmit(
                 // @ts-ignore
@@ -379,11 +379,11 @@ class asyncEventChannel {
 }
 
 
-export default asyncEventChannel
+export default AsyncEventChannel
 
 /**
  * 获取事件通道构造器实例的wmap值
  * @param ctx 事件通道构造器实例
  * @returns wmap值
  */
-export const getWmapValue = (ctx: InstanceType<typeof asyncEventChannel>) => wmap.get(ctx)
+export const getWmapValue = (ctx: InstanceType<typeof AsyncEventChannel>) => wmap.get(ctx)
