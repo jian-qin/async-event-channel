@@ -16,6 +16,7 @@ export interface WmapValue {
     optionsMap: Map<any, Partial<EventChannelOptions>>
     listeners: Map<any, Set<Function>>
     emitCaches: Map<any, Set<any[]>>
+    watchOffThisWeakMap: WeakMap<any, Function>
     watchOffWeakMap: WeakMap<any, Function>
     watchOffMap: Map<any, Function>
     onEmitWeakMap: WeakMap<any[], Function>
@@ -87,6 +88,7 @@ class AsyncEventChannel {
             optionsMap: optionsMap || new Map(),
             listeners: new Map(),
             emitCaches: new Map(),
+            watchOffThisWeakMap: new WeakMap(),
             watchOffWeakMap: new WeakMap(),
             watchOffMap: new Map(),
             onEmitWeakMap: new WeakMap(),
@@ -167,21 +169,22 @@ class AsyncEventChannel {
         if (args.length === 0) {
             throw new Error('至少需要一个参数')
         }
-        const { listeners, emitCaches, watchOffWeakMap, watchOffMap, onEmitWeakMap, promiseEmitWeakMap } = wmap.get(this)!
+        const { listeners, emitCaches, watchOffThisWeakMap, watchOffWeakMap, watchOffMap, onEmitWeakMap, promiseEmitWeakMap } = wmap.get(this)!
         const proxyDelete = (
             MS:
                 | WmapValue['listeners']
                 | WmapValue['emitCaches']
                 | NonNullable<ReturnType<WmapValue['listeners']['get']>>
                 | NonNullable<ReturnType<WmapValue['emitCaches']['get']>>
+                | WmapValue['watchOffThisWeakMap']
             ,
             _idThis: (any | IdThis)[]
         ) => {
-            const cb = watchOffWeakMap.get(_idThis) || watchOffMap.get(_idThis)
-            if (MS.has(_idThis) && cb) {
-                cb()
-                watchOffWeakMap.delete(_idThis)
-                watchOffMap.delete(_idThis)
+            if (MS.has(_idThis)) {
+                const watchOff_cb = watchOffWeakMap.get(_idThis) || watchOffMap.get(_idThis)
+                watchOff_cb && watchOff_cb()
+                const watchOff_this_cb = watchOffThisWeakMap.get(_idThis)
+                watchOff_this_cb && watchOff_this_cb()
             }
             MS.delete(_idThis)
             onEmitWeakMap.delete(_idThis)
@@ -190,6 +193,7 @@ class AsyncEventChannel {
         args.forEach(_idThis => {
             proxyDelete(listeners, _idThis)
             proxyDelete(emitCaches, _idThis)
+            proxyDelete(watchOffThisWeakMap, _idThis)
         })
 
         listeners.forEach((set, eventName) => {
@@ -213,27 +217,35 @@ class AsyncEventChannel {
     }
 
     /**
-     * 监听销毁
+     * 监听‘取消监听’
      * @param _idThis 唯一标识或事件名称
      * @param cb 回调函数
-     * @returns 取消监听函数（不使用off方法，防止套娃）
+     * @returns 唯一标识（用于取消监听）
      */
     watchOff(_idThis: any | IdThis, cb: Function) {
         if (typeof cb !== 'function') {
             throw new Error('必须传入回调函数')
         }
-        const { watchOffWeakMap, watchOffMap } = wmap.get(this)!
+        const { watchOffThisWeakMap, watchOffWeakMap, watchOffMap } = wmap.get(this)!
 
-        try{
-            watchOffWeakMap.set(_idThis, cb)
-        } catch (e) {
-            watchOffMap.set(_idThis, cb)
-        }
-
-        return () => {
+        const _cb = () => {
             watchOffWeakMap.delete(_idThis)
             watchOffMap.delete(_idThis)
+            cb()
+            watchOffThisWeakMap.delete(cb)
         }
+        try{
+            watchOffWeakMap.set(_idThis, _cb)
+        } catch (e) {
+            watchOffMap.set(_idThis, _cb)
+        }
+
+        watchOffThisWeakMap.set(cb, () => {
+            watchOffWeakMap.delete(_idThis)
+            watchOffMap.delete(_idThis)
+            watchOffThisWeakMap.delete(cb)
+        })
+        return cb
     }
 
     /**
