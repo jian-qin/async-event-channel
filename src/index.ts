@@ -61,8 +61,8 @@ export default class AsyncEventChannel {
   }
   #options
   #optionsMap
-  #listener
-  #emitCache
+  #listener = createSet<ListenerItem>()
+  #emitCache = createSet<EmitCacheItem>()
 
   /**
    * @param options 当前实例配置
@@ -84,8 +84,6 @@ export default class AsyncEventChannel {
     Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.id })
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
-    this.#listener = createSet<ListenerItem>()
-    this.#emitCache = createSet<EmitCacheItem>()
   }
 
   #getOption(
@@ -209,10 +207,13 @@ export default class AsyncEventChannel {
     }
     let cancel
     const promise = new Promise((resolve, reject) => {
-      cancel = reject
       const run = this.emit(...args)
       if (run.async) {
         run.done = resolve
+        cancel = (reason?: any) => {
+          run.cancel()
+          reject(reason)
+        }
       } else {
         resolve(run.values)
       }
@@ -224,5 +225,102 @@ export default class AsyncEventChannel {
       cancel: (reason?: any) => void
       promise: Promise<any[]>
     }
+  }
+}
+
+export function createScoped(ctx: AsyncEventChannelCtx) {
+  const watchiInclude = ['on', 'emit', 'once', 'asyncEmit']
+  const cancels = new Set<() => void>()
+  return {
+    ctx: new Proxy(ctx, {
+      get(target, propKey) {
+        let origin = Reflect.get.call(ctx, target, propKey)
+        if (typeof origin === 'function') {
+          origin = origin.bind(ctx)
+        }
+        if (!watchiInclude.includes(propKey as string)) return origin
+        return (...args: any[]) => {
+          const run = origin.call(ctx, ...args)
+          cancels.add(run.cancel)
+          return run
+        }
+      }
+    }),
+    cancel() {
+      cancels.forEach((cancel) => cancel())
+      cancels.clear()
+    },
+  }
+}
+
+export class TasksQueue {
+  #types
+  #oneAuto
+  #tasks = new Map()
+  #load = false
+  #isCancel = false
+  #loadCb = () => {}
+  #isRunning = false
+  get isRunning() {
+    return this.#isRunning
+  }
+
+  constructor(types: any[], oneAuto = true) {
+    if (types.length === 0) {
+      throw new Error('至少需要一个参数')
+    }
+    this.#types = types
+    this.#oneAuto = oneAuto
+  }
+
+  on(type: any, cb: (res: any) => any) {
+    if (!this.#types.includes(type)) {
+      throw new Error('未知的类型')
+    }
+    if (typeof cb !== 'function') {
+      throw new Error('必须传入回调函数')
+    }
+    if (this.#tasks.has(type)) return
+    this.#tasks.set(type, cb)
+    if (this.#types.length === this.#tasks.size) {
+      this.#load = true
+      this.#oneAuto && this.start()
+      this.#loadCb()
+    }
+  }
+
+  onLoad(cb: () => void) {
+    this.#loadCb = cb
+  }
+
+  async start(res?: any) {
+    if (this.#isRunning || !this.#load) return
+    this.#isRunning = true
+    this.#isCancel = false
+    let i = 0
+    while (i < this.#tasks.size) {
+      if (this.#isCancel) {
+        this.#isRunning = false
+        this.#isCancel = false
+        return Promise.reject({
+          status: 'cancel',
+          data: '任务被取消',
+        })
+      }
+      res = await Promise.resolve(this.#tasks.get(this.#types[i])(res)).catch((err) => {
+        this.#isRunning = false
+        return Promise.reject({
+          status: 'error',
+          data: err,
+        })
+      })
+      ++i
+    }
+    this.#isRunning = false
+    return res
+  }
+
+  cancel() {
+    this.#isCancel = true
   }
 }
