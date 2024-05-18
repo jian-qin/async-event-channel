@@ -6,9 +6,7 @@
   "types": "/dist/index.d.ts",
   "type": "module",
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist"
   ],
   "scripts": {
     "build": "tsc",
@@ -22,7 +20,10 @@
     "url": "git+https://github.com/jian-qin/async-event-channel.git"
   },
   "keywords": [
-    "typescript"
+    "typescript",
+    "async",
+    "event",
+    "channel"
   ],
   "author": "jian-qin",
   "license": "MIT",
