@@ -253,7 +253,7 @@ export function createScoped(ctx: AsyncEventChannelCtx) {
   }
 }
 
-export class TasksQueue {
+export class AsyncTaskQueue {
   #types
   #oneAuto
   #tasks = new Map()
