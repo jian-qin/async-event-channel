@@ -9,6 +9,7 @@
     "dist",
     "LICENSE",
     "README.md",
+    "README.zh-CN.md",
     "package.json"
   ],
   "scripts": {
