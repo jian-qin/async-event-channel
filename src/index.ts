@@ -75,12 +75,12 @@ type WatchCb = (data: {
   event: 'on' | 'emit' | 'off'
   progress: 'register' | 'run' | 'cancel'
   type: any
-  value?: any
+  value: any
 }) => void
 
 /**
- * 异步事件通道
- * @description 事件通道，支持异步事件，支持事件缓存，支持事件监听一次，支持同步触发事件，支持异步触发事件，支持事件监听流程
+ * Async event channel 异步事件通道
+ * @description Event channel support for asynchronous events support for event caching support for event listening once support for synchronous triggering events support for asynchronous triggering events support for event listening processes 事件通道，支持异步事件，支持事件缓存，支持事件监听一次，支持同步触发事件，支持异步触发事件，支持事件监听流程
  */
 export default class AsyncEventChannel {
   static id = 0
@@ -96,21 +96,21 @@ export default class AsyncEventChannel {
   #watchCbs = new Set<WatchCb>()
 
   /**
-   * @param options 当前实例配置
-   * @param options.isEmitCache 是否缓存未监听的事件
-   * @param options.isEmitOnce 是否只触发一次事件
-   * @param options.isOnOnce 是否只监听一次事件
-   * @param optionsMap 指定事件使用单独配置
+   * @param options Current instance configuration 当前实例配置
+   * @param options.isEmitCache Whether to cache unmonitored events 是否缓存未监听的事件
+   * @param options.isEmitOnce Whether to trigger the event only once 是否只触发一次事件
+   * @param options.isOnOnce Whether to listen to the event only once 是否只监听一次事件
+   * @param optionsMap Specify events to use separate configurations 指定事件使用单独配置
    */
   constructor(
     options?: Partial<AsyncEventChannelOptions> | null,
     optionsMap?: Map<any, Partial<AsyncEventChannelOptions>>
   ) {
     if (options && typeof options !== 'object') {
-      throw new Error('options必须是对象类型')
+      throw new Error('options must be an object')
     }
     if (optionsMap && !(optionsMap instanceof Map)) {
-      throw new Error('optionsMap必须是Map类型')
+      throw new Error('optionsMap must be an instance of Map')
     }
     Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.id })
     this.#options = options || {}
@@ -147,14 +147,14 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 监听事件
-   * @param type 事件类型
-   * @param cb 回调函数
-   * @returns 取消监听函数
+   * Listen for events 监听事件
+   * @param type Event type 事件类型
+   * @param cb Callback function 回调函数
+   * @returns Cancel listening function 取消监听函数
    */
   on(type: ListenerItem[0], cb: ListenerItem[1]) {
     if (typeof cb !== 'function') {
-      throw new Error('必须传入回调函数')
+      throw new Error('The callback function must be passed')
     }
     this.#watchCbs.forEach((watchCb) => watchCb({
       event: 'on',
@@ -226,13 +226,13 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 触发事件
-   * @param args 事件类型, 事件参数1, 事件参数2, ...
-   * @returns 取消触发函数、监听函数的返回值、是否异步、异步完成函数
+   * Trigger events 触发事件
+   * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
+   * @returns Cancel trigger function, return value of listener function, whether asynchronous, asynchronous completion function 取消触发函数、监听函数的返回值、是否异步、异步完成函数
    */
   emit(...args: EmitCacheItem) {
     if (args.length === 0) {
-      throw new Error('必须传入事件类型')
+      throw new Error('The event type must be passed')
     }
     const [type, ...params] = args
     this.#watchCbs.forEach((watchCb) => watchCb({
@@ -294,13 +294,13 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 取消监听事件并清除缓存事件
-   * @param types 事件类型1, 事件类型2, ...
-   * @returns 取消监听的事件总数、取消缓存的事件总数
+   * Cancel listening events and clear cache events 取消监听事件并清除缓存事件
+   * @param types Event type 1, event type 2, ... 事件类型1, 事件类型2, ...
+   * @returns The total number of events canceled and the total number of cache events canceled 取消监听的事件总数、取消缓存的事件总数
    */
   off(...types: any[]) {
     if (types.length === 0) {
-      throw new Error('至少需要一个事件类型')
+      throw new Error('At least one event type is required')
     }
     const totals = this.#off(...types)
     types.forEach((type) => this.#watchCbs.forEach((watchCb) => watchCb({
@@ -313,10 +313,10 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 只监听一次事件
-   * @param type 事件类型
-   * @param cb 回调函数
-   * @returns 取消监听函数
+   * Listen to events only once 只监听一次事件
+   * @param type Event type 事件类型
+   * @param cb Callback function 回调函数
+   * @returns Cancel listening function 取消监听函数
    */
   once(type: ListenerItem[0], cb: ListenerItem[1]) {
     const run = this.on(type, (...args) => {
@@ -328,13 +328,13 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 触发事件并同步返回结果
-   * @param args 事件类型, 事件参数1, 事件参数2, ...
-   * @returns 监听函数的返回值
+   * Trigger events and return the return value of the listener function 触发事件并返回监听函数的返回值
+   * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
+   * @returns The return value of the listener function 监听函数的返回值
    */
   syncEmit(...args: EmitCacheItem) {
     if (args.length === 0) {
-      throw new Error('必须传入事件类型')
+      throw new Error('The event type must be passed')
     }
     const run = this.emit(...args)
     run.cancel()
@@ -342,13 +342,13 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 触发事件并返回Promise
-   * @param args 事件类型, 事件参数1, 事件参数2, ...
-   * @returns 取消触发函数、Promise
+   * Trigger events and return Promise 触发事件并返回Promise
+   * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
+   * @returns Cancel trigger function, Promise 取消触发函数、Promise
    */
   asyncEmit(...args: EmitCacheItem) {
     if (args.length === 0) {
-      throw new Error('必须传入事件类型')
+      throw new Error('The event type must be passed')
     }
     let cancel
     const promise = new Promise((resolve, reject) => {
@@ -373,15 +373,15 @@ export default class AsyncEventChannel {
   }
 
   /**
-   * 监听流程
-   * @param args 事件类型, 回调函数，不传事件类型则监听所有事件
-   * @returns 取消监听函数
+   * Monitoring process 监听流程
+   * @param args Event type, callback function, do not pass event type to listen to all events 事件类型, 回调函数，不传事件类型则监听所有事件
+   * @returns Cancel listening function 取消监听函数
    */
   watch(...args: [WatchCb] | [any, WatchCb]) {
     const _args = args.slice(0, 2)
     const cb = _args[_args.length - 1]
     if (typeof cb !== 'function') {
-      throw new Error('必须传入回调函数')
+      throw new Error('The callback function must be passed')
     }
     let _cb = cb as WatchCb
     if (_args.length > 1) {
@@ -393,10 +393,10 @@ export default class AsyncEventChannel {
 }
 
 /**
- * 异步事件通道的取消函数作用域
- * @description 代理异步事件通道实例，监听异步事件通道实例的事件，取消所有事件监听
- * @param ctx 异步事件通道实例
- * @returns 代理实例、取消函数
+ * Cancel function scope for asynchronous event channels 异步事件通道的取消函数作用域
+ * @description Proxy asynchronous event channel instances, listen to events of asynchronous event channel instances, cancel all event listeners 代理异步事件通道实例，监听异步事件通道实例的事件，取消所有事件监听
+ * @param ctx Asynchronous event channel instance 异步事件通道实例
+ * @returns Proxy instance, cancel function 代理实例、取消函数
  */
 export function asyncEventChannelScope(ctx: AsyncEventChannelCtx) {
   const watchiInclude = ['on', 'emit', 'once', 'asyncEmit']
@@ -424,8 +424,8 @@ export function asyncEventChannelScope(ctx: AsyncEventChannelCtx) {
 }
 
 /**
- * 异步任务队列
- * @description 任务队列，支持异步注册任务，支持异步执行任务，支持取消任务
+ * Async task queue 异步任务队列
+ * @description Task queue, support asynchronous registration of tasks, support asynchronous execution of tasks, support cancellation of tasks 任务队列，支持异步注册任务，支持异步执行任务，支持取消任务
  */
 export class AsyncTaskQueue {
   #types
@@ -440,28 +440,28 @@ export class AsyncTaskQueue {
   }
 
   /**
-   * @param types 事件类型列表
-   * @param oneAuto 是否自动执行
+   * @param types Event type list 事件类型列表
+   * @param oneAuto Whether to automatically execute the first task 是否自动执行
    */
   constructor(types: any[], oneAuto = true) {
     if (types.length === 0) {
-      throw new Error('至少需要一个事件类型')
+      throw new Error('At least one event type is required')
     }
     this.#types = types
     this.#oneAuto = oneAuto
   }
 
   /**
-   * 监听事件
-   * @param type 事件类型
-   * @param cb 回调函数
+   * Listen for events 监听事件
+   * @param type Event type 事件类型
+   * @param cb Callback function 回调函数
    */
   on(type: any, cb: (res: any) => any) {
     if (!this.#types.includes(type)) {
-      throw new Error('未知的类型')
+      throw new Error('Unregistered type')
     }
     if (typeof cb !== 'function') {
-      throw new Error('必须传入回调函数')
+      throw new Error('The callback function must be passed')
     }
     if (this.#tasks.has(type)) return
     this.#tasks.set(type, cb)
@@ -473,17 +473,17 @@ export class AsyncTaskQueue {
   }
 
   /**
-   * 监听加载完成
-   * @param cb 加载完成回调
+   * Monitor the completion of the task queue 监听加载完成
+   * @param cb Callback function 回调函数
    */
   onLoad(cb: () => void) {
     this.#loadCb = cb
   }
 
   /**
-   * 开始执行任务
-   * @param res 第一个任务的参数
-   * @returns 任务队列执行结果
+   * Start the task 开始执行任务
+   * @param res The parameters of the first task 第一个任务的参数
+   * @returns The result of the task queue execution 任务队列执行结果
    */
   async start(res?: any) {
     if (this.#isRunning || !this.#load) return
@@ -496,7 +496,7 @@ export class AsyncTaskQueue {
         this.#isCancel = false
         return Promise.reject({
           status: 'cancel',
-          data: '任务被取消',
+          data: 'Task canceled',
         })
       }
       res = await Promise.resolve(this.#tasks.get(this.#types[i])(res)).catch((err) => {
@@ -513,7 +513,7 @@ export class AsyncTaskQueue {
   }
 
   /**
-   * 取消任务
+   * Cancel the task 取消任务
    */
   cancel() {
     this.#isCancel = true

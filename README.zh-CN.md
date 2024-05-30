@@ -1,153 +1,153 @@
 # async-event-channel
 
-English | [简体中文](./README.zh-CN.md)
+[English](./README.zh-CN.md) | 简体中文
 
-> Asynchronous event channels
+> 异步事件通道
 
-## Install
+## 安装
 
 ```bash
 npm install async-event-channel
 ```
 
-## Quick Comprehension
+## 快速理解
 
 ```javascript
-// event communication instance
+// 事件通信实例
 const dom = document.querySelector('.ctx');
 
-// register event
+// 注册事件
 dom.addEventListener('click', function(event) {
-  console.log('event received');
+  console.log('收到的事件');
 });
-// register event again
+// 再次注册事件
 dom.addEventListener('click', function(event) {
-  console.log('event received again');
+  console.log('再次收到事件');
 });
 
-// dispatch event
+// 触发事件
 dom.dispatchEvent(new Event('click'));
-// dispatch event again
+// 再次触发事件
 dom.dispatchEvent(new Event('click'));
 ```
 
-### Contrast
+### 对比
 
 ```javascript
 import AsyncEventChannel from 'async-event-channel';
 
-// event communication instance
+// 事件通信实例
 const channel = new AsyncEventChannel();
 
-// register event
+// 注册事件
 channel.on('click', function(...args) {
-  console.log('event received', args);
+  console.log('收到的事件', args);
 });
-// register event again
+// 再次注册事件
 channel.on('click', function(...args) {
-  console.log('event received again', args);
+  console.log('再次收到事件', args);
 });
 
-// dispatch event
-channel.emit('click', 'event data1', 'event data2');
-// dispatch event again
-channel.emit('click', 'event data3', 'event data4');
+// 触发事件
+channel.emit('click', '事件数据1', '事件数据2');
+// 再次触发事件
+channel.emit('click', '事件数据3', '事件数据4');
 ```
 
-## Async Communication
+## 异步通信
 
 ```javascript
 import AsyncEventChannel from 'async-event-channel';
 
 const channel = new AsyncEventChannel();
 
-// Emit events first(Only when the event is not registered, will it wait asynchronously to send the event)
-channel.emit('timeout', 'timeout event');
+// 首先发出事件 (仅当事件未注册时，才会异步等待发送事件)
+channel.emit('timeout', '异步事件');
 
-// Register events later
+// 稍后注册事件
 setTimeout(() => {
   channel.on('timeout', function(data) {
-    console.log(data); // timeout event
+    console.log(data); // 异步事件
   });
 }, 1000);
 ```
 
-## Get event return value
+## 获取事件返回值
 
 ```javascript
 channel.on('get', function(data) {
-  console.log(data); // event data
-  return 'return value';
+  console.log(data); // 事件数据
+  return '返回值';
 });
 
-const result = channel.emit('get', 'event data');
-console.log(result.values[0]); // return value
+const result = channel.emit('get', '事件数据');
+console.log(result.values[0]); // 返回值
 ```
 
-## Get event return value asynchronously
+## 异步获取事件返回值
 
 ```javascript
-channel.asyncEmit('get', 'event data').then(result => {
-  console.log(result.values[0]); // return value
+channel.asyncEmit('get', '事件数据').then(result => {
+  console.log(result.values[0]); // 返回值
 });
 
 setTimeout(() => {
   channel.on('get', function(data) {
-    console.log(data); // event data
-    return 'return value';
+    console.log(data); // 事件数据
+    return '返回值';
   });
 }, 1000);
 ```
 
-## Get event return value synchronously
+## 同步获取事件返回值
 
 ```javascript
 channel.on('get', function(data) {
-  console.log(data); // event data
-  return 'return value';
+  console.log(data); // 事件数据
+  return '返回值';
 });
 
-// If the event is not registered, undefined will be obtained
-const values = channel.syncEmit('get', 'event data');
-console.log(values[0]); // return value
+// 如果未注册事件，将获得 undefined
+const values = channel.syncEmit('get', '事件数据');
+console.log(values[0]); // 返回值
 ```
 
-## Cancel listening events
+## 取消侦听事件
 
 ```javascript
 const { cancel } = channel.on('cancel', function() {
-  return 'cancel event';
+  return '取消事件';
 });
 
-// Cancel listening events
+// 取消侦听事件
 cancel();
 
 const values = channel.syncEmit('cancel');
 console.log(values); // []
 ```
 
-## Cancel the triggering event in waiting
+## 取消等待中的触发事件
 
 ```javascript
-const { cancel } = channel.emit('cancel', 'cancel event');
+const { cancel } = channel.emit('cancel', '取消事件');
 
-// Cancel the triggering event in waiting
+// 取消等待中的触发事件
 cancel();
 
-// Unable to receive events
+// 无法接收事件
 channel.on('cancel', function(data) {
   console.log(data);
 });
 ```
 
-## Cancel listening events and triggering events on the specified channel
+## 取消指定通道上的监听事件和触发事件
 
 ```javascript
 channel.on('cancel', function() {
-  return 'cancel event';
+  return '取消事件';
 });
 channel.on('cancel', function() {
-  return 'cancel event again';
+  return '再次取消事件';
 });
 
 channel.off('cancel');
@@ -156,34 +156,34 @@ const values = channel.syncEmit('cancel');
 console.log(values); // []
 ```
 
-## Listening process
+## 监听过程
 
 ```javascript
-// Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
+// 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
 channel.watch('watch', function(data) {
-  console.log(data); // { "event": "on", "progress": "register", "type": "watch", "value": function() { return "watch event"; } }
+  console.log(data); // { "event": "on", "progress": "register", "type": "watch", "value": function() { return "监听过程"; } }
 });
 
 channel.on('watch', function() {
-  return 'watch event';
+  return '监听过程';
 });
 ```
 
-## Listen to events only once
+## 只监听一次事件
 
 ```javascript
 channel.once('once', function() {
-  return 'once event';
+  return '一次事件';
 });
 
 const values = channel.syncEmit('once');
-console.log(values[0]); // once event
+console.log(values[0]); // 一次事件
 
 const valuesAgain = channel.syncEmit('once');
 console.log(valuesAgain); // []
 ```
 
-## Unified collection of cancel events
+## 取消事件的统一收集
 
 ```javascript
 import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
@@ -192,31 +192,31 @@ const channel = new AsyncEventChannel();
 const { ctx, cancel } = asyncEventChannelScope(channel);
 
 ctx.on('cancel', function() {
-  return 'cancel event';
+  return '取消事件';
 });
 channel.once('cancel', function() {
-  return 'cancel event again';
+  return '再次取消事件';
 });
 
-// Cancel all events
+// 取消所有事件
 cancel();
 
 const values = ctx.syncEmit('cancel');
 console.log(values); // []
 
-// Only events on the proxy instance will be canceled
+// 仅取消代理实例上的事件
 const valuesAgain = channel.syncEmit('cancel');
-console.log(valuesAgain); // ["cancel event again"]
+console.log(valuesAgain); // ["再次取消事件"]
 ```
 
-## Disable asynchronous triggering events
+## 设置禁用异步触发事件
 
 ```javascript
 const channel = new AsyncEventChannel({ isEmitCache: false });
 
-channel.emit('disable', 'disable event');
+channel.emit('disable', '禁用事件');
 
-// Unable to receive events
+// 无法接收事件
 setTimeout(() => {
   channel.on('disable', function(data) {
     console.log(data);
@@ -224,67 +224,67 @@ setTimeout(() => {
 }, 1000);
 ```
 
-## The same channel can only register one event
+## 设置同一通道只能注册一个事件
 
 ```javascript
 const channel = new AsyncEventChannel({ isOnOnce: true });
 
 channel.on('once', function() {
-  return 'once event';
+  return '一次事件';
 });
 
-// Overwrite the previous event
+// 覆盖上一个事件
 channel.on('once', function() {
-  return 'once event again';
+  return '第二次一次事件';
 });
 
 const values = channel.syncEmit('once');
-console.log(values[0]); // once event again
+console.log(values[0]); // 第二次一次事件
 ```
 
-## The same channel can only trigger one event
+## 设置同一通道只能触发一个事件
 
 ```javascript
 const channel = new AsyncEventChannel({ isEmitOnce: true });
 
-channel.emit('once', 'once event');
+channel.emit('once', '一次事件');
 
-// Overwrite the previous waiting event
-channel.emit('once', 'once event again');
+// 覆盖上一个等待事件
+channel.emit('once', '第二次一次事件');
 
-// Only the last event can be received
+// 只能接收最后一个事件
 channel.on('once', function(data) {
-  console.log(data); // once event again
+  console.log(data); // 第二次一次事件
 });
 ```
 
-## Only set the specified event type
+## 仅设置指定的事件类型
 
 ```javascript
 const options = new Map();
 options.set('only', { isEmitCache: false });
 const channel = new AsyncEventChannel(null, options);
 
-channel.emit('only', 'only event');
+channel.emit('only', '指定事件');
 
-// Unable to receive events
+// 无法接收事件
 setTimeout(() => {
   channel.on('only', function(data) {
     console.log(data);
   });
 }, 1000);
 
-channel.emit('other', 'other event');
+channel.emit('other', '其他事件');
 
-// Can receive events
+// 可以接收事件
 setTimeout(() => {
   channel.on('other', function(data) {
-    console.log(data); // other event
+    console.log(data); // 其他事件
   });
 }, 1000);
 ```
 
-## Modify global default configuration
+## 修改全局默认配置
 
 ```javascript
 import AsyncEventChannel from 'async-event-channel';
@@ -292,24 +292,24 @@ import AsyncEventChannel from 'async-event-channel';
 AsyncEventChannel.defaultOptions.isEmitCache = false;
 ```
 
-## Priority of configuration items
+## 配置项的优先级
 
 ```javascript
-// specify
+// 指定
 new AsyncEventChannel(null, new Map([ ['only', { isEmitCache: true }] ]))
 
-// current
+// 当前
 new AsyncEventChannel({ isEmitCache: true })
 
-// global
+// 全局
 AsyncEventChannel.defaultOptions.isEmitCache
 
-// specify > current > global
+// 指定 > 当前 > 全局
 ```
 
-## Values that can be used as event types
+## 可用作事件类型的值
 
-> Any type of value can be used, including strings, numbers, objects, arrays, symbols, null, etc.
+> 可以使用任何类型的值，包括字符串，数字，对象，数组，符号，null等
 
 ```javascript
 const channel = new AsyncEventChannel();
@@ -323,22 +323,22 @@ channel.on(null, function() {});
 channel.on(function() {}, function() {});
 ```
 
-# Asynchronous task queue
+# 异步任务队列
 
-> unrelated to event channels
+> 与事件通道无关
 
 ```javascript
 import { AsyncTaskQueue } from 'async-event-channel';
 
-// Event types can be any type of value
+// 事件类型可以是任何类型的值
 const types = ['a', 1, null, ''];
-// Whether to execute automatically after ready
+// 就绪后是否自动执行
 const oneAuto = false;
 
-// Create an asynchronous task queue
+// 创建异步任务队列
 const queue = new AsyncTaskQueue(types, oneAuto);
 
-// Add tasks to the queue
+// 将任务添加到队列
 queue.on('a', function(state) {
   console.log(1)
   return 'a';
@@ -351,7 +351,7 @@ queue.on(null, async function(state) {
 setTimeout(() => {
   queue.on(1, function(state) {
     console.log(2)
-    queue.cancel(); // Cancel the execution of this task queue
+    queue.cancel(); // 取消本次任务队列的执行
     return 1;
   });
 }, 1000);
@@ -360,18 +360,18 @@ queue.on('', function(state) {
   return '';
 });
 
-// Ready to execute
+// 准备就绪
 queue.onLoad(function() {
-  console.log('queue ready');
+  console.log('准备就绪');
   queue.start(0).then(result => {
-    // This queue execution result
+    // 本次任务队列执行结果
     console.log(result);
   }).catch(error => {
-    // This queue execution error
+    // 本次任务队列执行错误
     console.error(error);
   });
 });
 
-// Whether the task queue is running
+// 任务队列是否正在运行
 console.log(queue.isRunning)
 ```

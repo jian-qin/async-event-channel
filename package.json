@@ -24,8 +24,9 @@
   },
   "keywords": [
     "event channel",
+    "async event channel",
+    "auto cancel",
     "task queue",
-    "async",
     "typescript"
   ],
   "author": "jian-qin",
