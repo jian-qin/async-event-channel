@@ -1,6 +1,6 @@
 # async-event-channel
 
-[English](./README.zh-CN.md) | 简体中文
+[English](./README.md) | 简体中文
 
 > 异步事件通道
 
@@ -87,7 +87,7 @@ console.log(result.values[0]); // 返回值
 ## 异步获取事件返回值
 
 ```javascript
-channel.asyncEmit('get', '事件数据').then(result => {
+channel.asyncEmit('get', '事件数据').promise.then(result => {
   console.log(result.values[0]); // 返回值
 });
 
@@ -167,6 +167,22 @@ channel.watch('watch', function(data) {
 channel.on('watch', function() {
   return '监听过程';
 });
+```
+
+## 监听事件和微任务
+
+```javascript
+let current = 0;
+
+channel.on('microtask', function() {
+  // 和Promise.resolve().then()一样，回调函数在当前事件循环的微任务队列中执行
+  console.log('执行时刻', current); // 1
+});
+
+// 立刻触发事件
+channel.emit('microtask');
+
+current = 1;
 ```
 
 ## 只监听一次事件

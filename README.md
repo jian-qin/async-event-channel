@@ -87,7 +87,7 @@ console.log(result.values[0]); // return value
 ## Get event return value asynchronously
 
 ```javascript
-channel.asyncEmit('get', 'event data').then(result => {
+channel.asyncEmit('get', 'event data').promise.then(result => {
   console.log(result.values[0]); // return value
 });
 
@@ -167,6 +167,22 @@ channel.watch('watch', function(data) {
 channel.on('watch', function() {
   return 'watch event';
 });
+```
+
+## Listening events and microtasks
+
+```javascript
+let current = 0;
+
+channel.on('microtask', function() {
+  // Like Promise.resolve().then(), the callback function is executed in the microtask queue of the current event loop
+  console.log('execute time', current); // 1
+});
+
+// Trigger events immediately
+channel.emit('microtask');
+
+current = 1;
 ```
 
 ## Listen to events only once

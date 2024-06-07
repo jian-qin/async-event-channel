@@ -152,7 +152,7 @@ export default class AsyncEventChannel {
    * @param cb Callback function 回调函数
    * @returns Cancel listening function 取消监听函数
    */
-  on(type: ListenerItem[0], cb: ListenerItem[1]) {
+  on = (type: ListenerItem[0], cb: ListenerItem[1]) => {
     if (typeof cb !== 'function') {
       throw new Error('The callback function must be passed')
     }
@@ -230,7 +230,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns Cancel trigger function, return value of listener function, whether asynchronous, asynchronous completion function 取消触发函数、监听函数的返回值、是否异步、异步完成函数
    */
-  emit(...args: EmitCacheItem) {
+  emit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
@@ -298,7 +298,7 @@ export default class AsyncEventChannel {
    * @param types Event type 1, event type 2, ... 事件类型1, 事件类型2, ...
    * @returns The total number of events canceled and the total number of cache events canceled 取消监听的事件总数、取消缓存的事件总数
    */
-  off(...types: any[]) {
+  off = (...types: any[]) => {
     if (types.length === 0) {
       throw new Error('At least one event type is required')
     }
@@ -318,7 +318,7 @@ export default class AsyncEventChannel {
    * @param cb Callback function 回调函数
    * @returns Cancel listening function 取消监听函数
    */
-  once(type: ListenerItem[0], cb: ListenerItem[1]) {
+  once = (type: ListenerItem[0], cb: ListenerItem[1]) => {
     const run = this.on(type, (...args) => {
       const _run = cb(...args)
       run.cancel()
@@ -332,7 +332,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns The return value of the listener function 监听函数的返回值
    */
-  syncEmit(...args: EmitCacheItem) {
+  syncEmit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
@@ -346,7 +346,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns Cancel trigger function, Promise 取消触发函数、Promise
    */
-  asyncEmit(...args: EmitCacheItem) {
+  asyncEmit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
@@ -377,7 +377,7 @@ export default class AsyncEventChannel {
    * @param args Event type, callback function, do not pass event type to listen to all events 事件类型, 回调函数，不传事件类型则监听所有事件
    * @returns Cancel listening function 取消监听函数
    */
-  watch(...args: [WatchCb] | [any, WatchCb]) {
+  watch = (...args: [WatchCb] | [any, WatchCb]) => {
     const _args = args.slice(0, 2)
     const cb = _args[_args.length - 1]
     if (typeof cb !== 'function') {
@@ -456,7 +456,7 @@ export class AsyncTaskQueue {
    * @param type Event type 事件类型
    * @param cb Callback function 回调函数
    */
-  on(type: any, cb: (res: any) => any) {
+  on = (type: any, cb: (res: any) => any) => {
     if (!this.#types.includes(type)) {
       throw new Error('Unregistered type')
     }
@@ -476,7 +476,7 @@ export class AsyncTaskQueue {
    * Monitor the completion of the task queue 监听加载完成
    * @param cb Callback function 回调函数
    */
-  onLoad(cb: () => void) {
+  onLoad = (cb: () => void) => {
     this.#loadCb = cb
   }
 
@@ -485,7 +485,7 @@ export class AsyncTaskQueue {
    * @param res The parameters of the first task 第一个任务的参数
    * @returns The result of the task queue execution 任务队列执行结果
    */
-  async start(res?: any) {
+  start = async (res?: any) => {
     if (this.#isRunning || !this.#load) return
     this.#isRunning = true
     this.#isCancel = false
@@ -515,7 +515,7 @@ export class AsyncTaskQueue {
   /**
    * Cancel the task 取消任务
    */
-  cancel() {
+  cancel = () => {
     this.#isCancel = true
   }
 }
