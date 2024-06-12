@@ -1,7 +1,7 @@
 {
   "name": "async-event-channel",
   "description": "Asynchronous event channels",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "main": "./dist/index.cjs.js",
   "module": "./dist/index.esm.js",
   "types": "./dist/index.d.ts",
