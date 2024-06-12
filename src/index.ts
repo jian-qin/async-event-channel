@@ -14,15 +14,15 @@ function createSet<T extends any[]>() {
   _set.add = new Proxy(_set.add, {
     apply(target, thisArg, argArray: [T]) {
       const run = Reflect.apply(target, thisArg, argArray)
-      const [type, ...args] = argArray[0]
+      const [type] = argArray[0]
       _set._add_cbs.forEach((item) => {
         if (item.length === 1) {
           const [_cb] = item
-          _cb(type, ...args)
+          _cb(argArray[0])
         } else {
           const [_type, _cb] = item
           if (_type !== type) return
-          _cb(...args)
+          _cb(argArray[0])
         }
         item._one && _set._add_cbs.delete(item)
       })
@@ -33,10 +33,11 @@ function createSet<T extends any[]>() {
     apply(target, thisArg, argArray: [T]) {
       const run = Reflect.apply(target, thisArg, argArray)
       if (run) {
-        const [type, ...args] = argArray[0]
+        const [type] = argArray[0]
         _set._delete_cbs.forEach((item) => {
-          if (item[0] !== type) return
-          item[1](...args)
+          const [_type, _cb] = item
+          if (_type !== type) return
+          _cb(argArray[0])
           _set._delete_cbs.delete(item)
         })
       }
@@ -178,18 +179,17 @@ export default class AsyncEventChannel {
       type,
       value: cb,
     }))
-    const cancel = run.cancel
-    run.cancel = () => {
-      const __run = cancel()
+    const unwatch = this.#listener.watch_delete(type, (item) => {
+      if (item.id !== run.id) return
+      unwatch()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'on',
         progress: 'cancel',
         type,
-        value: __run,
+        value: true,
       }))
-      return __run
-    }
+    })
     return run
   }
 
@@ -210,8 +210,9 @@ export default class AsyncEventChannel {
     }
     const [type, ...params] = args
     this.#listener.forEach((item) => {
-      if (item[0] !== type) return
-      run.values.push(item[1](...params))
+      const [_type, _cb] = item
+      if (_type !== type) return
+      run.values.push(_cb(...params))
     })
     if (run.values.length === 0 && this.#getOption(type, 'isEmitCache')) {
       if (this.#getOption(type, 'isEmitOnce')) {
@@ -220,7 +221,7 @@ export default class AsyncEventChannel {
         })
       }
       this.#emitCache.add(args)
-      const cancel = this.#listener.watch_add_one(type, (cb) => {
+      const cancel = this.#listener.watch_add_one(type, ([, cb]) => {
         this.#emitCache.delete(args)
         Promise.resolve().then(() => {
           run.values.push(cb(...params))
@@ -254,18 +255,17 @@ export default class AsyncEventChannel {
       type,
       value: params,
     }))
-    const cancel = run.cancel
-    run.cancel = () => {
-      const _run = cancel()
+    const unwatch = this.#emitCache.watch_delete(type, (item) => {
+      if (item.id !== run.id) return
+      unwatch()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'emit',
         progress: 'cancel',
         type,
-        value: params,
+        value: true,
       }))
-      return _run
-    }
+    })
     if (run.async) {
       run.done = (values) => {
         this.#watchCbs.forEach((watchCb) => watchCb({
