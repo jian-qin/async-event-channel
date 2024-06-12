@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-> Asynchronous event channels
+> Two-way communication asynchronous event channel
 
 ## Install
 
