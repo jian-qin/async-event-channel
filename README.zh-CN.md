@@ -72,7 +72,7 @@ setTimeout(() => {
 }, 1000);
 ```
 
-## 获取事件返回值
+## 获取事件返回值（双向通信）
 
 ```javascript
 channel.on('get', function(data) {
@@ -84,7 +84,7 @@ const result = channel.emit('get', '事件数据');
 console.log(result.values[0]); // 返回值
 ```
 
-## 异步获取事件返回值
+## 异步获取事件返回值（双向通信）
 
 ```javascript
 channel.asyncEmit('get', '事件数据').promise.then(result => {
@@ -99,7 +99,7 @@ setTimeout(() => {
 }, 1000);
 ```
 
-## 同步获取事件返回值
+## 同步获取事件返回值（双向通信）
 
 ```javascript
 channel.on('get', function(data) {
@@ -161,10 +161,13 @@ console.log(values); // []
 ```javascript
 // 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
 channel.watch('watch', function(data) {
-  console.log(data); // { "event": "on", "progress": "register", "type": "watch", "value": function() { return "监听过程"; } }
+  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() { return "监听过程"; } }
+  if (data.id === id) {
+    console.log('匹配成功');
+  }
 });
 
-channel.on('watch', function() {
+const { id } = channel.on('watch', function() {
   return '监听过程';
 });
 ```
@@ -185,7 +188,7 @@ channel.emit('microtask');
 current = 1;
 ```
 
-## 只监听一次事件
+## 只监听一次事件（双向通信）
 
 ```javascript
 channel.once('once', function() {

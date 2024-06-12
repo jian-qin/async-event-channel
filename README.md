@@ -72,7 +72,7 @@ setTimeout(() => {
 }, 1000);
 ```
 
-## Get event return value
+## Get event return value (two-way communication)
 
 ```javascript
 channel.on('get', function(data) {
@@ -84,7 +84,7 @@ const result = channel.emit('get', 'event data');
 console.log(result.values[0]); // return value
 ```
 
-## Get event return value asynchronously
+## Get event return value asynchronously (two-way communication)
 
 ```javascript
 channel.asyncEmit('get', 'event data').promise.then(result => {
@@ -99,7 +99,7 @@ setTimeout(() => {
 }, 1000);
 ```
 
-## Get event return value synchronously
+## Get event return value synchronously (two-way communication)
 
 ```javascript
 channel.on('get', function(data) {
@@ -161,10 +161,13 @@ console.log(values); // []
 ```javascript
 // Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
 channel.watch('watch', function(data) {
-  console.log(data); // { "event": "on", "progress": "register", "type": "watch", "value": function() { return "watch event"; } }
+  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() { return "watch event"; } }
+  if (data.id === id) {
+    console.log('match success');
+  }
 });
 
-channel.on('watch', function() {
+const { id } = channel.on('watch', function() {
   return 'watch event';
 });
 ```
@@ -185,7 +188,7 @@ channel.emit('microtask');
 current = 1;
 ```
 
-## Listen to events only once
+## Listen to events only once (two-way communication)
 
 ```javascript
 channel.once('once', function() {

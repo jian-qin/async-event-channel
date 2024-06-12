@@ -2,7 +2,8 @@
   "name": "async-event-channel",
   "description": "Asynchronous event channels",
   "version": "2.1.2",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs.js",
+  "module": "./dist/index.esm.js",
   "types": "./dist/index.d.ts",
   "type": "module",
   "files": [
@@ -13,10 +14,13 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc & pnpm run esbuild:cjs & pnpm run esbuild:esm",
+    "esbuild:cjs": "esbuild src/index.ts --bundle --platform=node --target=esnext --outfile=dist/index.cjs.js --format=cjs",
+    "esbuild:esm": "esbuild src/index.ts --bundle --platform=neutral --target=esnext --outfile=dist/index.esm.js --format=esm",
     "test": "echo \"no test specified\""
   },
   "devDependencies": {
+    "esbuild": "^0.21.5",
     "typescript": "^5.2.2"
   },
   "repository": {
@@ -24,9 +28,9 @@
     "url": "git+https://github.com/jian-qin/async-event-channel.git"
   },
   "keywords": [
-    "event channel",
-    "async event channel",
-    "auto cancel",
+    "cache emit",
+    "two-way communication",
+    "scope cancel",
     "task queue",
     "typescript"
   ],
