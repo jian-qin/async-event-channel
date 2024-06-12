@@ -69,9 +69,10 @@ function createSet<T extends any[]>() {
 
 export type AsyncEventChannelCtx = InstanceType<typeof AsyncEventChannel>
 export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions']
-type ListenerItem = [any, (...args: any[]) => any]
-type EmitCacheItem = any[]
+type ListenerItem = [any, (...args: any[]) => any] & { id: number }
+type EmitCacheItem = any[] & { id: number }
 type WatchCb = (data: {
+  id?: number
   event: 'on' | 'emit' | 'off'
   progress: 'register' | 'run' | 'cancel'
   type: any
@@ -83,12 +84,13 @@ type WatchCb = (data: {
  * @description Event channel support for asynchronous events support for event caching support for event listening once support for synchronous triggering events support for asynchronous triggering events support for event listening processes 事件通道，支持异步事件，支持事件缓存，支持事件监听一次，支持同步触发事件，支持异步触发事件，支持事件监听流程
  */
 export default class AsyncEventChannel {
-  static id = 0
   static defaultOptions = {
     isEmitCache: true,
     isEmitOnce: false,
     isOnOnce: false,
   }
+  static #id = 0;
+  #processId = 0;
   #options
   #optionsMap
   #listener = createSet<ListenerItem>()
@@ -112,7 +114,7 @@ export default class AsyncEventChannel {
     if (optionsMap && !(optionsMap instanceof Map)) {
       throw new Error('optionsMap must be an instance of Map')
     }
-    Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.id })
+    Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.#id })
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
   }
@@ -139,9 +141,11 @@ export default class AsyncEventChannel {
         item[0] === type && this.#listener.delete(item)
       })
     }
-    const item: ListenerItem = [type, cb]
+    const item = [type, cb] as ListenerItem
+    item.id = ++this.#processId
     this.#listener.add(item)
     return {
+      id: item.id,
       cancel: () => this.#listener.delete(item)
     }
   }
@@ -156,15 +160,10 @@ export default class AsyncEventChannel {
     if (typeof cb !== 'function') {
       throw new Error('The callback function must be passed')
     }
-    this.#watchCbs.forEach((watchCb) => watchCb({
-      event: 'on',
-      progress: 'register',
-      type,
-      value: cb,
-    }))
     const run = this.#on(type, (...args: Parameters<typeof cb>) => {
       const _run = cb(...args)
       this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
         event: 'on',
         progress: 'run',
         type,
@@ -172,10 +171,18 @@ export default class AsyncEventChannel {
       }))
       return _run
     })
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      id: run.id,
+      event: 'on',
+      progress: 'register',
+      type,
+      value: cb,
+    }))
     const cancel = run.cancel
     run.cancel = () => {
       const __run = cancel()
       this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
         event: 'on',
         progress: 'cancel',
         type,
@@ -186,13 +193,17 @@ export default class AsyncEventChannel {
     return run
   }
 
-  #emit(...args: EmitCacheItem) {
+  #emit(..._args: any[]) {
+    const args = _args as EmitCacheItem
+    args.id = ++this.#processId
     const run: {
+      id: number
       cancel: () => boolean
       values: any[]
       async: boolean
       done?: (args: any[]) => void
     } = {
+      id: args.id,
       cancel: () => false,
       values: [],
       async: false,
@@ -230,22 +241,24 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns Cancel trigger function, return value of listener function, whether asynchronous, asynchronous completion function 取消触发函数、监听函数的返回值、是否异步、异步完成函数
    */
-  emit = (...args: EmitCacheItem) => {
+  emit = (...args: any[]) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
     const [type, ...params] = args
+    const run = this.#emit(...args)
     this.#watchCbs.forEach((watchCb) => watchCb({
+      id: run.id,
       event: 'emit',
       progress: 'register',
       type,
       value: params,
     }))
-    const run = this.#emit(...args)
     const cancel = run.cancel
     run.cancel = () => {
       const _run = cancel()
       this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
         event: 'emit',
         progress: 'cancel',
         type,
@@ -256,6 +269,7 @@ export default class AsyncEventChannel {
     if (run.async) {
       run.done = (values) => {
         this.#watchCbs.forEach((watchCb) => watchCb({
+          id: run.id,
           event: 'emit',
           progress: 'run',
           type,
@@ -264,6 +278,7 @@ export default class AsyncEventChannel {
       }
     } else {
       this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
         event: 'emit',
         progress: 'run',
         type,
@@ -275,19 +290,19 @@ export default class AsyncEventChannel {
 
   #off(...types: any[]) {
     const totals = {
-      listener: 0,
-      emitCache: 0,
+      listener: [] as number[],
+      emitCache: [] as number[],
     }
     types.forEach((type) => {
       this.#listener.forEach((item) => {
         if (item[0] !== type) return
+        totals.listener.push(item.id)
         this.#listener.delete(item)
-        ++totals.listener
       })
       this.#emitCache.forEach((item) => {
         if (item[0] !== type) return
+        totals.emitCache.push(item.id)
         this.#emitCache.delete(item)
-        ++totals.emitCache
       })
     })
     return totals
@@ -350,23 +365,26 @@ export default class AsyncEventChannel {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
-    let cancel
+    let id, cancel
     const promise = new Promise((resolve, reject) => {
       const run = this.emit(...args)
+      id = run.id
+      cancel = (reason?: any) => {
+        run.cancel()
+        reject(reason)
+      }
       if (run.async) {
         run.done = resolve
-        cancel = (reason?: any) => {
-          run.cancel()
-          reject(reason)
-        }
       } else {
         resolve(run.values)
       }
     })
     return {
+      id,
       cancel,
       promise,
     } as unknown as {
+      id: number
       cancel: (reason?: any) => void
       promise: Promise<any[]>
     }
