@@ -35,6 +35,8 @@ dom.dispatchEvent(new Event('click'));
 
 ```javascript
 import AsyncEventChannel from 'async-event-channel';
+// 或
+// const { default: AsyncEventChannel } = require('async-event-channel');
 
 // 事件通信实例
 const channel = new AsyncEventChannel();
@@ -161,7 +163,7 @@ console.log(values); // []
 ```javascript
 // 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
 channel.watch('watch', function(data) {
-  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() { return "监听过程"; } }
+  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
   if (data.id === id) {
     console.log('匹配成功');
   }

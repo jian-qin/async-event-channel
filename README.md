@@ -35,6 +35,8 @@ dom.dispatchEvent(new Event('click'));
 
 ```javascript
 import AsyncEventChannel from 'async-event-channel';
+// or
+// const { default: AsyncEventChannel } = require('async-event-channel');
 
 // event communication instance
 const channel = new AsyncEventChannel();
@@ -161,7 +163,7 @@ console.log(values); // []
 ```javascript
 // Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
 channel.watch('watch', function(data) {
-  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() { return "watch event"; } }
+  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
   if (data.id === id) {
     console.log('match success');
   }

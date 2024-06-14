@@ -75,7 +75,7 @@ type EmitCacheItem = any[] & { id: number }
 type WatchCb = (data: {
   id?: number
   event: 'on' | 'emit' | 'off'
-  progress: 'register' | 'run' | 'cancel'
+  progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
 }) => void
@@ -179,13 +179,25 @@ export default class AsyncEventChannel {
       type,
       value: cb,
     }))
+    const cancel = run.cancel
+    run.cancel = () => {
+      const value = cancel()
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
+        event: 'on',
+        progress: 'cancel',
+        type,
+        value,
+      }))
+      return value
+    }
     const unwatch = this.#listener.watch_delete(type, (item) => {
       if (item.id !== run.id) return
       unwatch()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'on',
-        progress: 'cancel',
+        progress: 'delete',
         type,
         value: true,
       }))
@@ -255,13 +267,25 @@ export default class AsyncEventChannel {
       type,
       value: params,
     }))
+    const cancel = run.cancel
+    run.cancel = () => {
+      const value = cancel()
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
+        event: 'emit',
+        progress: 'cancel',
+        type,
+        value,
+      }))
+      return value
+    }
     const unwatch = this.#emitCache.watch_delete(type, (item) => {
       if (item.id !== run.id) return
       unwatch()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'emit',
-        progress: 'cancel',
+        progress: 'delete',
         type,
         value: true,
       }))
@@ -347,7 +371,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns The return value of the listener function 监听函数的返回值
    */
-  syncEmit = (...args: EmitCacheItem) => {
+  syncEmit = (...args: any[]) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
@@ -361,7 +385,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns Cancel trigger function, Promise 取消触发函数、Promise
    */
-  asyncEmit = (...args: EmitCacheItem) => {
+  asyncEmit = (...args: any[]) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
