@@ -6,6 +6,18 @@
   "module": "./dist/index.esm.js",
   "umd": "./dist/index.umd.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs.js"
+    },
+    "./es5": {
+      "types": "./dist/es5/index.d.ts",
+      "import": "./dist/es5/index.esm.js",
+      "require": "./dist/es5/index.cjs.js"
+    }
+  },
   "files": [
     "dist",
     "LICENSE",
