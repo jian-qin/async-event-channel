@@ -4,6 +4,7 @@
   "version": "2.1.5",
   "main": "./dist/index.cjs.js",
   "module": "./dist/index.esm.js",
+  "umd": "./dist/index.umd.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
@@ -13,13 +14,15 @@
     "package.json"
   ],
   "scripts": {
-    "build": "tsc & pnpm run esbuild:cjs & pnpm run esbuild:esm",
-    "esbuild:cjs": "esbuild src/index.ts --bundle --platform=node --target=esnext --outfile=dist/index.cjs.js --format=cjs",
-    "esbuild:esm": "esbuild src/index.ts --bundle --platform=neutral --target=esnext --outfile=dist/index.esm.js --format=esm",
+    "build": "rimraf dist && rollup -c && rollup -c rollup.config.es5.mjs",
     "test": "echo \"no test specified\""
   },
   "devDependencies": {
-    "esbuild": "^0.21.5",
+    "@babel/preset-env": "^7.24.7",
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "rimraf": "^5.0.7",
+    "rollup": "^4.18.0",
     "typescript": "^5.2.2"
   },
   "repository": {
