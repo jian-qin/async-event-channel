@@ -5,7 +5,7 @@
     "module": "ESNext",
     "declaration": true,
     "emitDeclarationOnly": true,
-    "declarationDir": "./dist",
+    "declarationDir": "./",
     "strict": true
   },
 }

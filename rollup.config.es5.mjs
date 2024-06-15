@@ -6,15 +6,15 @@ export default defineConfig({
   input: 'src/index.ts',
   output: [
     {
-      file: 'dist/es5/index.cjs.js',
+      file: 'dist-es5/index.js',
       format: 'cjs',
     },
     {
-      file: 'dist/es5/index.esm.js',
+      file: 'dist-es5/index.esm.js',
       format: 'esm',
     },
     {
-      file: 'dist/es5/index.umd.js',
+      file: 'dist-es5/index.umd.js',
       format: 'umd',
       name: 'AsyncEventChannel',
     },
