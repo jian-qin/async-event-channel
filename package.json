@@ -13,21 +13,21 @@
       "require": "./dist/index.js"
     },
     "./es5": {
-      "types": "./dist-es5/index.d.ts",
-      "import": "./dist-es5/index.esm.js",
-      "require": "./dist-es5/index.js"
+      "types": "./es5/index.d.ts",
+      "import": "./es5/index.esm.js",
+      "require": "./es5/index.js"
     }
   },
   "files": [
     "dist",
-    "dist-es5",
+    "es5",
     "LICENSE",
     "README.md",
     "README.zh-CN.md",
     "package.json"
   ],
   "scripts": {
-    "build": "rimraf dist dist-es5 && rollup -c && rollup -c rollup.config.es5.mjs",
+    "build": "rimraf dist es5 && rollup -c && rollup -c rollup.config.es5.mjs",
     "test": "echo \"no test specified\""
   },
   "devDependencies": {
