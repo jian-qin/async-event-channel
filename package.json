@@ -1,7 +1,7 @@
 {
   "name": "async-event-channel",
   "description": "Two-way communication asynchronous event channel",
-  "version": "2.1.9",
+  "version": "2.1.10",
   "main": "./dist/index.js",
   "module": "./dist/index.esm.js",
   "umd": "./dist/index.umd.js",
