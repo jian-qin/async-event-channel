@@ -37,6 +37,8 @@ dom.dispatchEvent(new Event('click'));
 import AsyncEventChannel from 'async-event-channel';
 // or
 // const { default: AsyncEventChannel } = require('async-event-channel');
+// or
+// import AsyncEventChannel from 'async-event-channel/es5';
 
 // event communication instance
 const channel = new AsyncEventChannel();
@@ -172,6 +174,15 @@ channel.watch('watch', function(data) {
 const { id } = channel.on('watch', function() {
   return 'watch event';
 });
+```
+
+## Query whether it still exists
+
+```javascript
+const { id } = channel.on('exists', function() {});
+
+console.log(channel.hasId(id)); // true
+console.log(channel.hasType('exists')); // true
 ```
 
 ## Listening events and microtasks

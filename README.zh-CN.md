@@ -37,6 +37,8 @@ dom.dispatchEvent(new Event('click'));
 import AsyncEventChannel from 'async-event-channel';
 // 或
 // const { default: AsyncEventChannel } = require('async-event-channel');
+// 或
+// import AsyncEventChannel from 'async-event-channel/es5';
 
 // 事件通信实例
 const channel = new AsyncEventChannel();
@@ -172,6 +174,15 @@ channel.watch('watch', function(data) {
 const { id } = channel.on('watch', function() {
   return '监听过程';
 });
+```
+
+## 查询是否还存在
+
+```javascript
+const { id } = channel.on('exists', function() {});
+
+console.log(channel.hasId(id)); // true
+console.log(channel.hasType('exists')); // true
 ```
 
 ## 监听事件和微任务

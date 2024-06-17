@@ -72,13 +72,13 @@ export type AsyncEventChannelCtx = InstanceType<typeof AsyncEventChannel>
 export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions']
 type ListenerItem = [any, (...args: any[]) => any] & { id: number }
 type EmitCacheItem = any[] & { id: number }
-type WatchCb = (data: {
+type WatchCb = ((data: {
   id?: number
   event: 'on' | 'emit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
-}) => void
+}) => void) & { id: number }
 
 /**
  * Async event channel 异步事件通道
@@ -427,10 +427,42 @@ export default class AsyncEventChannel {
     }
     let _cb = cb as WatchCb
     if (_args.length > 1) {
-      _cb = (data) => data.type === _args[0] && cb(data)
+      _cb = ((data) => data.type === _args[0] && cb(data)) as WatchCb
     }
+    _cb.id = ++this.#processId
     this.#watchCbs.add(_cb)
-    return () => this.#watchCbs.delete(_cb)
+    return {
+      id: _cb.id,
+      cancel: () => this.#watchCbs.delete(_cb)
+    }
+  }
+
+  /**
+   * Query whether the id still exists 查询id是否还存在
+   * @param id Event listener id, trigger id, monitoring process id 事件监听器的id、触发器的id、监听流程的id
+   * @returns Whether it exists 是否存在
+   */
+  hasId = (id: number) => {
+    for (const set of [this.#listener, this.#emitCache, this.#watchCbs]) {
+      for (const item of set) {
+        if (item.id === id) return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * Query whether the event type still exists 查询事件类型是否还存在
+   * @param type Event type 事件类型
+   * @returns Whether it exists 是否存在
+   */
+  hasType = (type: any) => {
+    for (const set of [this.#listener, this.#emitCache]) {
+      for (const item of set) {
+        if (item[0] === type) return true
+      }
+    }
+    return false
   }
 }
 
@@ -441,7 +473,7 @@ export default class AsyncEventChannel {
  * @returns Proxy instance, cancel function 代理实例、取消函数
  */
 export function asyncEventChannelScope(ctx: AsyncEventChannelCtx) {
-  const watchiInclude = ['on', 'emit', 'once', 'asyncEmit']
+  const watchiInclude = ['on', 'emit', 'once', 'asyncEmit', 'watch']
   const cancels = new Set<() => void>()
   return {
     ctx: new Proxy(ctx, {
