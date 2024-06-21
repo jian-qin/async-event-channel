@@ -165,6 +165,7 @@ console.log(values); // []
 ```javascript
 // 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
 channel.watch('watch', function(data) {
+  // 注意：无法保证监听过程的执行顺序
   console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
   if (data.id === id) {
     console.log('匹配成功');
@@ -183,6 +184,31 @@ const { id } = channel.on('exists', function() {});
 
 console.log(channel.hasId(id)); // true
 console.log(channel.hasType('exists')); // true
+```
+
+## 导入导出
+
+```javascript
+const channel_old = new AsyncEventChannel();
+const channel_new = new AsyncEventChannel();
+
+channel_old.on('import', function() {
+  return '导入事件';
+});
+
+// 导出事件通道数据
+const data = channel_old.export();
+
+// 导入事件通道数据
+channel_new.import(...data);
+
+// 导入事件通道数据后，可以使用导入的事件通道数据
+const values_new = channel_new.syncEmit('import');
+console.log(values_new[0]); // 导入事件
+
+// 相当于复制，不会影响原事件通道数据
+const values_old = channel_old.syncEmit('import');
+console.log(values_old[0]); // 导入事件
 ```
 
 ## 监听事件和微任务

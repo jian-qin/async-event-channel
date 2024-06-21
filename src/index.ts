@@ -77,7 +77,7 @@ type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
 export type AsyncEventChannelCtx = InstanceType<typeof AsyncEventChannel>
 export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions']
-export type currentDataItem = {
+export type CurrentDataItem = {
   id: number
   event: 'on' | 'emit' | 'once' | 'asyncEmit' | 'watch'
   value: Parameters<
@@ -88,16 +88,17 @@ export type currentDataItem = {
     | AsyncEventChannel['watch']
   >
 }
-
-type ListenerItem = [any, (...args: any[]) => any]
-type EmitCacheItem = any[]
-type WatchCb = (data: {
+export type WatchDataItem = {
   id?: number
   event: 'on' | 'emit' | 'once' | 'syncEmit' | 'asyncEmit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
-}) => void
+}
+
+type ListenerItem = [any, (...args: any[]) => any]
+type EmitCacheItem = any[]
+type WatchCb = (data: WatchDataItem) => void
 
 /**
  * Async event channel 异步事件通道
@@ -116,7 +117,7 @@ export default class AsyncEventChannel {
   #listener = createSet<ListenerItem & { id: number }>()
   #emitCache = createSet<EmitCacheItem & { id: number }>()
   #watchCbs = new Set<WatchCb & { id: number }>()
-  #currentData = new Map<number, currentDataItem>()
+  #currentData = new Map<number, CurrentDataItem>()
 
   /**
    * @param options Current instance configuration 当前实例配置
@@ -625,7 +626,7 @@ export default class AsyncEventChannel {
    * data import 数据导入
    * @param data Event listener data, event cache data, monitoring process data 事件监听器数据、事件缓存数据、监听流程数据
    */
-  import = (...data: Optional<currentDataItem, 'id'>[]) => {
+  import = (...data: Optional<CurrentDataItem, 'id'>[]) => {
     const events = ['on', 'emit', 'once', 'asyncEmit', 'watch']
     data.sort((a, b) => (a.id || 0) - (b.id || 0))
     return data.map((item) => {

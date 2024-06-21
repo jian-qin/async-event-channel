@@ -165,6 +165,7 @@ console.log(values); // []
 ```javascript
 // Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
 channel.watch('watch', function(data) {
+  // Note: The execution order of the listening process cannot be guaranteed
   console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
   if (data.id === id) {
     console.log('match success');
@@ -183,6 +184,31 @@ const { id } = channel.on('exists', function() {});
 
 console.log(channel.hasId(id)); // true
 console.log(channel.hasType('exists')); // true
+```
+
+## 导入导出
+
+```javascript
+const channel_old = new AsyncEventChannel();
+const channel_new = new AsyncEventChannel();
+
+channel_old.on('import', function() {
+  return 'import event';
+});
+
+// Export event channel data
+const data = channel_old.export();
+
+// Import event channel data
+channel_new.import(...data);
+
+// Equivalent to copy, does not affect the original event channel data
+const values_new = channel_new.syncEmit('import');
+console.log(values_new[0]); // import event
+
+// Equivalent to copy, does not affect the original event channel data
+const values_old = channel_old.syncEmit('import');
+console.log(values_old[0]); // import event
 ```
 
 ## Listening events and microtasks
