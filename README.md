@@ -186,7 +186,7 @@ console.log(channel.hasId(id)); // true
 console.log(channel.hasType('exists')); // true
 ```
 
-## 导入导出
+## Import and export
 
 ```javascript
 const channel_old = new AsyncEventChannel();
