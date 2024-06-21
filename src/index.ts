@@ -35,10 +35,15 @@ function createSet<T extends any[]>() {
       if (run) {
         const [type] = argArray[0]
         _set._delete_cbs.forEach((item) => {
-          const [_type, _cb] = item
-          if (_type !== type) return
-          _cb(argArray[0])
-          _set._delete_cbs.delete(item)
+          if (item.length === 1) {
+            const [_cb] = item
+            _cb(argArray[0])
+          } else {
+            const [_type, _cb] = item
+            if (_type !== type) return
+            _cb(argArray[0])
+          }
+          item._one && _set._delete_cbs.delete(item)
         })
       }
       return run
@@ -68,17 +73,31 @@ function createSet<T extends any[]>() {
   return _set
 }
 
+type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
+
 export type AsyncEventChannelCtx = InstanceType<typeof AsyncEventChannel>
 export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions']
-type ListenerItem = [any, (...args: any[]) => any] & { id: number }
-type EmitCacheItem = any[] & { id: number }
-type WatchCb = ((data: {
+export type currentDataItem = {
+  id: number
+  event: 'on' | 'emit' | 'once' | 'asyncEmit' | 'watch'
+  value: Parameters<
+    | AsyncEventChannel['on']
+    | AsyncEventChannel['emit']
+    | AsyncEventChannel['once']
+    | AsyncEventChannel['asyncEmit']
+    | AsyncEventChannel['watch']
+  >
+}
+
+type ListenerItem = [any, (...args: any[]) => any]
+type EmitCacheItem = any[]
+type WatchCb = (data: {
   id?: number
-  event: 'on' | 'emit' | 'off'
+  event: 'on' | 'emit' | 'once' | 'syncEmit' | 'asyncEmit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
-}) => void) & { id: number }
+}) => void
 
 /**
  * Async event channel 异步事件通道
@@ -94,9 +113,10 @@ export default class AsyncEventChannel {
   #processId = 0;
   #options
   #optionsMap
-  #listener = createSet<ListenerItem>()
-  #emitCache = createSet<EmitCacheItem>()
-  #watchCbs = new Set<WatchCb>()
+  #listener = createSet<ListenerItem & { id: number }>()
+  #emitCache = createSet<EmitCacheItem & { id: number }>()
+  #watchCbs = new Set<WatchCb & { id: number }>()
+  #currentData = new Map<number, currentDataItem>()
 
   /**
    * @param options Current instance configuration 当前实例配置
@@ -118,6 +138,18 @@ export default class AsyncEventChannel {
     Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.#id })
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
+    this.#handleCurrentData()
+  }
+
+  #handleCurrentData() {
+    this.#listener.watch_delete(item => this.#currentData.delete(item.id))
+    this.#emitCache.watch_delete(item => this.#currentData.delete(item.id))
+    this.#watchCbs.delete = new Proxy(this.#watchCbs.delete, {
+      apply: (target, thisArg, argArray) => {
+        this.#currentData.delete(argArray[0].id)
+        return Reflect.apply(target, thisArg, argArray)
+      }
+    })
   }
 
   #getOption(
@@ -142,7 +174,7 @@ export default class AsyncEventChannel {
         item[0] === type && this.#listener.delete(item)
       })
     }
-    const item = [type, cb] as ListenerItem
+    const item = [type, cb] as ListenerItem & { id: number }
     item.id = ++this.#processId
     this.#listener.add(item)
     return {
@@ -161,7 +193,7 @@ export default class AsyncEventChannel {
     if (typeof cb !== 'function') {
       throw new Error('The callback function must be passed')
     }
-    const run = this.#on(type, (...args: Parameters<typeof cb>) => {
+    const _cb = (...args: Parameters<typeof cb>) => {
       const _run = cb(...args)
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
@@ -171,25 +203,26 @@ export default class AsyncEventChannel {
         value: _run,
       }))
       return _run
-    })
+    }
+    const run = this.#on(type, _cb)
     this.#watchCbs.forEach((watchCb) => watchCb({
       id: run.id,
       event: 'on',
       progress: 'register',
       type,
-      value: cb,
+      value: _cb,
     }))
-    const cancel = run.cancel
+    const _cancel = run.cancel
     run.cancel = () => {
-      const value = cancel()
+      const _run = _cancel()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'on',
         progress: 'cancel',
         type,
-        value,
+        value: _run,
       }))
-      return value
+      return _run
     }
     const unwatch = this.#listener.watch_delete(type, (item) => {
       if (item.id !== run.id) return
@@ -202,11 +235,16 @@ export default class AsyncEventChannel {
         value: true,
       }))
     })
+    this.#currentData.set(run.id, {
+      id: run.id,
+      event: 'on',
+      value: [type, cb]
+    })
     return run
   }
 
-  #emit(..._args: any[]) {
-    const args = _args as EmitCacheItem
+  #emit(..._args: EmitCacheItem) {
+    const args = _args as EmitCacheItem & { id: number }
     args.id = ++this.#processId
     const run: {
       id: number
@@ -234,10 +272,10 @@ export default class AsyncEventChannel {
       }
       this.#emitCache.add(args)
       const cancel = this.#listener.watch_add_one(type, ([, cb]) => {
-        this.#emitCache.delete(args)
         Promise.resolve().then(() => {
           run.values.push(cb(...params))
           typeof run.done === 'function' && run.done(run.values)
+          this.#emitCache.delete(args)
         })
       })
       run.async = true
@@ -254,7 +292,7 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns Cancel trigger function, return value of listener function, whether asynchronous, asynchronous completion function 取消触发函数、监听函数的返回值、是否异步、异步完成函数
    */
-  emit = (...args: any[]) => {
+  emit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
@@ -267,17 +305,17 @@ export default class AsyncEventChannel {
       type,
       value: params,
     }))
-    const cancel = run.cancel
+    const _cancel = run.cancel
     run.cancel = () => {
-      const value = cancel()
+      const _run = _cancel()
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'emit',
         progress: 'cancel',
         type,
-        value,
+        value: _run,
       }))
-      return value
+      return _run
     }
     const unwatch = this.#emitCache.watch_delete(type, (item) => {
       if (item.id !== run.id) return
@@ -290,17 +328,7 @@ export default class AsyncEventChannel {
         value: true,
       }))
     })
-    if (run.async) {
-      run.done = (values) => {
-        this.#watchCbs.forEach((watchCb) => watchCb({
-          id: run.id,
-          event: 'emit',
-          progress: 'run',
-          type,
-          value: values,
-        }))
-      }
-    } else {
+    const _done = () => {
       this.#watchCbs.forEach((watchCb) => watchCb({
         id: run.id,
         event: 'emit',
@@ -309,6 +337,16 @@ export default class AsyncEventChannel {
         value: run.values,
       }))
     }
+    if (run.async) {
+      run.done = _done
+    } else {
+      _done()
+    }
+    run.async && this.#currentData.set(run.id, {
+      id: run.id,
+      event: 'emit',
+      value: args
+    })
     return run
   }
 
@@ -342,13 +380,26 @@ export default class AsyncEventChannel {
       throw new Error('At least one event type is required')
     }
     const totals = this.#off(...types)
-    types.forEach((type) => this.#watchCbs.forEach((watchCb) => watchCb({
-      event: 'off',
-      progress: 'run',
-      type,
-      value: totals,
-    })))
+    types.forEach((type) => {
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        event: 'off',
+        progress: 'run',
+        type,
+        value: totals,
+      }))
+    })
     return totals
+  }
+
+  #once(type: ListenerItem[0], cb: ListenerItem[1]) {
+    const run = this.on(type, (...args) => {
+      const _run = cb(...args)
+      _cancel()
+      return _run
+    })
+    const _cancel = run.cancel
+    run.cancel = () => _cancel()
+    return run
   }
 
   /**
@@ -358,12 +409,52 @@ export default class AsyncEventChannel {
    * @returns Cancel listening function 取消监听函数
    */
   once = (type: ListenerItem[0], cb: ListenerItem[1]) => {
-    const run = this.on(type, (...args) => {
+    if (typeof cb !== 'function') {
+      throw new Error('The callback function must be passed')
+    }
+    const _cb = (...args: Parameters<typeof cb>) => {
       const _run = cb(...args)
-      run.cancel()
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
+        event: 'once',
+        progress: 'run',
+        type,
+        value: _run,
+      }))
       return _run
+    }
+    const run = this.#once(type, _cb)
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      id: run.id,
+      event: 'once',
+      progress: 'register',
+      type,
+      value: _cb,
+    }))
+    const _cancel = run.cancel
+    run.cancel = () => {
+      const _run = _cancel()
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id: run.id,
+        event: 'once',
+        progress: 'cancel',
+        type,
+        value: _run,
+      }))
+      return _run
+    }
+    this.#currentData.set(run.id, {
+      id: run.id,
+      event: 'once',
+      value: [type, cb]
     })
     return run
+  }
+
+  #syncEmit(...args: EmitCacheItem) {
+    const run = this.emit(...args)
+    run.async && run.cancel()
+    return run.values
   }
 
   /**
@@ -371,26 +462,30 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns The return value of the listener function 监听函数的返回值
    */
-  syncEmit = (...args: any[]) => {
+  syncEmit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
-    const run = this.emit(...args)
-    run.cancel()
-    return run.values
+    const [type, ...params] = args
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      event: 'syncEmit',
+      progress: 'register',
+      type,
+      value: params,
+    }))
+    const run = this.#syncEmit(...args)
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      event: 'syncEmit',
+      progress: 'run',
+      type,
+      value: run.values,
+    }))
+    return run
   }
 
-  /**
-   * Trigger events and return Promise 触发事件并返回Promise
-   * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
-   * @returns Cancel trigger function, Promise 取消触发函数、Promise
-   */
-  asyncEmit = (...args: any[]) => {
-    if (args.length === 0) {
-      throw new Error('The event type must be passed')
-    }
+  #asyncEmit(...args: EmitCacheItem) {
     let id, cancel
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Promise<any[]>((resolve, reject) => {
       const run = this.emit(...args)
       id = run.id
       cancel = (reason?: any) => {
@@ -403,14 +498,64 @@ export default class AsyncEventChannel {
         resolve(run.values)
       }
     })
+    id = id as unknown as number
+    cancel = cancel as unknown as (reason?: any) => void
     return {
       id,
-      cancel,
       promise,
-    } as unknown as {
-      id: number
-      cancel: (reason?: any) => void
-      promise: Promise<any[]>
+      cancel,
+    }
+  }
+
+  /**
+   * Trigger events and return Promise 触发事件并返回Promise
+   * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
+   * @returns Cancel trigger function, Promise 取消触发函数、Promise
+   */
+  asyncEmit = (...args: EmitCacheItem) => {
+    if (args.length === 0) {
+      throw new Error('The event type must be passed')
+    }
+    const [type, ...params] = args
+    const { id, promise, cancel } = this.#asyncEmit(...args)
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      id,
+      event: 'asyncEmit',
+      progress: 'register',
+      type,
+      value: params,
+    }))
+    const _promise = promise.then((res) => {
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id,
+        event: 'asyncEmit',
+        progress: 'run',
+        type,
+        value: res,
+      }))
+      return res
+    })
+    const _cancel = () => {
+      const _run = cancel()
+      this.#watchCbs.forEach((watchCb) => watchCb({
+        id,
+        event: 'asyncEmit',
+        progress: 'cancel',
+        type,
+        value: _run,
+      }))
+      return _run
+    }
+    this.#currentData.set(id, {
+      id,
+      event: 'asyncEmit',
+      value: args
+    })
+    _promise.finally(() => this.#currentData.delete(id))
+    return {
+      id,
+      promise: _promise,
+      cancel: _cancel,
     }
   }
 
@@ -425,12 +570,17 @@ export default class AsyncEventChannel {
     if (typeof cb !== 'function') {
       throw new Error('The callback function must be passed')
     }
-    let _cb = cb as WatchCb
+    let _cb = cb as WatchCb & { id: number }
     if (_args.length > 1) {
-      _cb = ((data) => data.type === _args[0] && cb(data)) as WatchCb
+      _cb = ((data) => data.type === _args[0] && cb(data)) as typeof _cb
     }
     _cb.id = ++this.#processId
     this.#watchCbs.add(_cb)
+    this.#currentData.set(_cb.id, {
+      id: _cb.id,
+      event: 'watch',
+      value: args
+    })
     return {
       id: _cb.id,
       cancel: () => this.#watchCbs.delete(_cb)
@@ -463,6 +613,37 @@ export default class AsyncEventChannel {
       }
     }
     return false
+  }
+
+  /**
+   * data export 数据导出
+   * @returns Event listener data, event cache data, monitoring process data 事件监听器数据、事件缓存数据、监听流程数据
+   */
+  export = () => Array.from(this.#currentData.values())
+
+  /**
+   * data import 数据导入
+   * @param data Event listener data, event cache data, monitoring process data 事件监听器数据、事件缓存数据、监听流程数据
+   */
+  import = (...data: Optional<currentDataItem, 'id'>[]) => {
+    const events = ['on', 'emit', 'once', 'asyncEmit', 'watch']
+    data.sort((a, b) => (a.id || 0) - (b.id || 0))
+    return data.map((item) => {
+      if (!events.includes(item.event)) {
+        throw new Error('Unsupported operation type')
+      }
+      if (item.event === 'watch') {
+        const value = item.value
+        const _cb = value[value.length - 1]
+        let _watch_ready = false
+        Promise.resolve().then(() => _watch_ready = true)
+        value[value.length - 1] = (data: WatchCb) => _watch_ready && _cb(data)
+        // @ts-ignore
+        return this.watch(...value)
+      }
+      // @ts-ignore
+      return this[item.event](...item.value)
+    })
   }
 }
 
