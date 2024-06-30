@@ -90,7 +90,7 @@ export type CurrentDataItem = {
 }
 export type WatchDataItem = {
   id?: number
-  event: 'on' | 'emit' | 'once' | 'syncEmit' | 'asyncEmit' | 'off'
+  event: 'on' | 'emit' | 'once' | 'immedEmit' | 'asyncEmit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
@@ -452,7 +452,7 @@ export default class AsyncEventChannel {
     return run
   }
 
-  #syncEmit(...args: EmitCacheItem) {
+  #immedEmit(...args: EmitCacheItem) {
     const run = this.emit(...args)
     run.async && run.cancel()
     return run.values
@@ -463,20 +463,20 @@ export default class AsyncEventChannel {
    * @param args Event type, event parameter 1, event parameter 2, ... 事件类型, 事件参数1, 事件参数2, ...
    * @returns The return value of the listener function 监听函数的返回值
    */
-  syncEmit = (...args: EmitCacheItem) => {
+  immedEmit = (...args: EmitCacheItem) => {
     if (args.length === 0) {
       throw new Error('The event type must be passed')
     }
     const [type, ...params] = args
     this.#watchCbs.forEach((watchCb) => watchCb({
-      event: 'syncEmit',
+      event: 'immedEmit',
       progress: 'register',
       type,
       value: params,
     }))
-    const run = this.#syncEmit(...args)
+    const run = this.#immedEmit(...args)
     this.#watchCbs.forEach((watchCb) => watchCb({
-      event: 'syncEmit',
+      event: 'immedEmit',
       progress: 'run',
       type,
       value: run.values,

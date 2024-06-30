@@ -112,7 +112,7 @@ channel.on('get', function(data) {
 });
 
 // If the event is not registered, undefined will be obtained
-const values = channel.syncEmit('get', 'event data');
+const values = channel.immedEmit('get', 'event data');
 console.log(values[0]); // return value
 ```
 
@@ -126,7 +126,7 @@ const { cancel } = channel.on('cancel', function() {
 // Cancel listening events
 cancel();
 
-const values = channel.syncEmit('cancel');
+const values = channel.immedEmit('cancel');
 console.log(values); // []
 ```
 
@@ -156,7 +156,7 @@ channel.on('cancel', function() {
 
 channel.off('cancel');
 
-const values = channel.syncEmit('cancel');
+const values = channel.immedEmit('cancel');
 console.log(values); // []
 ```
 
@@ -203,11 +203,11 @@ const data = channel_old.export();
 channel_new.import(...data);
 
 // Equivalent to copy, does not affect the original event channel data
-const values_new = channel_new.syncEmit('import');
+const values_new = channel_new.immedEmit('import');
 console.log(values_new[0]); // import event
 
 // Equivalent to copy, does not affect the original event channel data
-const values_old = channel_old.syncEmit('import');
+const values_old = channel_old.immedEmit('import');
 console.log(values_old[0]); // import event
 ```
 
@@ -234,10 +234,10 @@ channel.once('once', function() {
   return 'once event';
 });
 
-const values = channel.syncEmit('once');
+const values = channel.immedEmit('once');
 console.log(values[0]); // once event
 
-const valuesAgain = channel.syncEmit('once');
+const valuesAgain = channel.immedEmit('once');
 console.log(valuesAgain); // []
 ```
 
@@ -259,11 +259,11 @@ channel.once('cancel', function() {
 // Cancel all events
 cancel();
 
-const values = ctx.syncEmit('cancel');
+const values = ctx.immedEmit('cancel');
 console.log(values); // []
 
 // Only events on the proxy instance will be canceled
-const valuesAgain = channel.syncEmit('cancel');
+const valuesAgain = channel.immedEmit('cancel');
 console.log(valuesAgain); // ["cancel event again"]
 ```
 
@@ -296,7 +296,7 @@ channel.on('once', function() {
   return 'once event again';
 });
 
-const values = channel.syncEmit('once');
+const values = channel.immedEmit('once');
 console.log(values[0]); // once event again
 ```
 

@@ -112,7 +112,7 @@ channel.on('get', function(data) {
 });
 
 // 如果未注册事件，将获得 undefined
-const values = channel.syncEmit('get', '事件数据');
+const values = channel.immedEmit('get', '事件数据');
 console.log(values[0]); // 返回值
 ```
 
@@ -126,7 +126,7 @@ const { cancel } = channel.on('cancel', function() {
 // 取消侦听事件
 cancel();
 
-const values = channel.syncEmit('cancel');
+const values = channel.immedEmit('cancel');
 console.log(values); // []
 ```
 
@@ -156,7 +156,7 @@ channel.on('cancel', function() {
 
 channel.off('cancel');
 
-const values = channel.syncEmit('cancel');
+const values = channel.immedEmit('cancel');
 console.log(values); // []
 ```
 
@@ -203,11 +203,11 @@ const data = channel_old.export();
 channel_new.import(...data);
 
 // 导入事件通道数据后，可以使用导入的事件通道数据
-const values_new = channel_new.syncEmit('import');
+const values_new = channel_new.immedEmit('import');
 console.log(values_new[0]); // 导入事件
 
 // 相当于复制，不会影响原事件通道数据
-const values_old = channel_old.syncEmit('import');
+const values_old = channel_old.immedEmit('import');
 console.log(values_old[0]); // 导入事件
 ```
 
@@ -234,10 +234,10 @@ channel.once('once', function() {
   return '一次事件';
 });
 
-const values = channel.syncEmit('once');
+const values = channel.immedEmit('once');
 console.log(values[0]); // 一次事件
 
-const valuesAgain = channel.syncEmit('once');
+const valuesAgain = channel.immedEmit('once');
 console.log(valuesAgain); // []
 ```
 
@@ -259,11 +259,11 @@ channel.once('cancel', function() {
 // 取消所有事件
 cancel();
 
-const values = ctx.syncEmit('cancel');
+const values = ctx.immedEmit('cancel');
 console.log(values); // []
 
 // 仅取消代理实例上的事件
-const valuesAgain = channel.syncEmit('cancel');
+const valuesAgain = channel.immedEmit('cancel');
 console.log(valuesAgain); // ["再次取消事件"]
 ```
 
@@ -296,7 +296,7 @@ channel.on('once', function() {
   return '第二次一次事件';
 });
 
-const values = channel.syncEmit('once');
+const values = channel.immedEmit('once');
 console.log(values[0]); // 第二次一次事件
 ```
 
