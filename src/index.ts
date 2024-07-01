@@ -78,7 +78,7 @@ type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 export type AsyncEventChannelCtx = InstanceType<typeof AsyncEventChannel>
 export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions']
 export type CurrentDataItem = {
-  id: number
+  id: string
   event: 'on' | 'emit' | 'once' | 'asyncEmit' | 'watch'
   value: Parameters<
     | AsyncEventChannel['on']
@@ -89,7 +89,7 @@ export type CurrentDataItem = {
   >
 }
 export type WatchDataItem = {
-  id?: number
+  id?: string
   event: 'on' | 'emit' | 'once' | 'immedEmit' | 'asyncEmit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
@@ -118,9 +118,9 @@ function asserts_watch(args: any[]): asserts args is [WatchCb] | [any, WatchCb] 
   if (typeof args[0] !== 'function' && typeof args[1] !== 'function')
     throw new Error('The callback function must be passed')
 }
-function asserts_hasId(id: unknown): asserts id is number {
-  if (typeof id !== 'number')
-    throw new Error('The id must be a number')
+function asserts_hasId(id: unknown): asserts id is string {
+  if (typeof id !== 'string')
+    throw new Error('The id must be a string')
 }
 
 /**
@@ -134,13 +134,13 @@ export default class AsyncEventChannel {
     isOnOnce: false,
   }
   static #id = 0;
-  #processId = 0;
+  #processId = '';
   #options
   #optionsMap
-  #listener = createSet<ListenerItem & { id: number }>()
-  #emitCache = createSet<EmitCacheItem & { id: number }>()
-  #watchCbs = new Set<WatchCb & { id: number }>()
-  #currentData = new Map<number, CurrentDataItem>()
+  #listener = createSet<ListenerItem & { id: string }>()
+  #emitCache = createSet<EmitCacheItem & { id: string }>()
+  #watchCbs = new Set<WatchCb & { id: string }>()
+  #currentData = new Map<string, CurrentDataItem>()
 
   /**
    * @param options Current instance configuration 当前实例配置
@@ -161,9 +161,16 @@ export default class AsyncEventChannel {
     }
     optionsCtxMap.set(this, [options, optionsMap])
     Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.#id })
+    this.#processId = `${AsyncEventChannel.#id}:0`
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
     this.#handleCurrentData()
+  }
+
+  #processIdInc() {
+    const [id, processId] = this.#processId.split(':')
+    this.#processId = `${id}:${+processId + 1}`
+    return this.#processId
   }
 
   #handleCurrentData() {
@@ -199,8 +206,8 @@ export default class AsyncEventChannel {
         item[0] === type && this.#listener.delete(item)
       })
     }
-    const item = [type, cb] as ListenerItem & { id: number }
-    item.id = ++this.#processId
+    const item = [type, cb] as ListenerItem & { id: string }
+    item.id = this.#processIdInc()
     this.#listener.add(item)
     return {
       id: item.id,
@@ -267,10 +274,10 @@ export default class AsyncEventChannel {
   }
 
   #emit(..._args: EmitCacheItem) {
-    const args = _args as EmitCacheItem & { id: number }
-    args.id = ++this.#processId
+    const args = _args as EmitCacheItem & { id: string }
+    args.id = this.#processIdInc()
     const run: {
-      id: number
+      id: string
       cancel: () => boolean
       values: any[]
       async: boolean
@@ -373,8 +380,8 @@ export default class AsyncEventChannel {
 
   #off(...types: any[]) {
     const totals = {
-      listener: [] as number[],
-      emitCache: [] as number[],
+      listener: [] as string[],
+      emitCache: [] as string[],
     }
     types.forEach((type) => {
       this.#listener.forEach((item) => {
@@ -513,7 +520,7 @@ export default class AsyncEventChannel {
         resolve(run.values)
       }
     })
-    id = id as unknown as number
+    id = id as unknown as string
     cancel = cancel as unknown as (reason?: any) => void
     return {
       id,
@@ -581,11 +588,11 @@ export default class AsyncEventChannel {
     asserts_watch(args)
     const _args = args.slice(0, 2)
     const cb = _args[_args.length - 1]
-    let _cb = cb as WatchCb & { id: number }
+    let _cb = cb as WatchCb & { id: string }
     if (_args.length > 1) {
       _cb = ((data) => data.type === _args[0] && cb(data)) as typeof _cb
     }
-    _cb.id = ++this.#processId
+    _cb.id = this.#processIdInc()
     this.#watchCbs.add(_cb)
     this.#currentData.set(_cb.id, {
       id: _cb.id,
@@ -603,7 +610,7 @@ export default class AsyncEventChannel {
    * @param id Event listener id, trigger id, monitoring process id 事件监听器的id、触发器的id、监听流程的id
    * @returns Whether it exists 是否存在
    */
-  hasId = (id: number) => {
+  hasId = (id: string) => {
     asserts_hasId(id)
     for (const set of [this.#listener, this.#emitCache, this.#watchCbs]) {
       for (const item of set) {
@@ -639,7 +646,11 @@ export default class AsyncEventChannel {
    */
   import = (...data: Optional<CurrentDataItem, 'id'>[]) => {
     const events = ['on', 'emit', 'once', 'asyncEmit', 'watch']
-    data.sort((a, b) => (a.id || 0) - (b.id || 0))
+    data.sort((a, b) => {
+      const _a = a.id ? a.id.split(':')[1] : '0'
+      const _b = b.id ? b.id.split(':')[1] : '0'
+      return +_a - +_b
+    })
     return data.map((item) => {
       if (!events.includes(item.event)) {
         throw new Error('Unsupported operation type')
