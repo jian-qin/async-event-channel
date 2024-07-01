@@ -100,6 +100,29 @@ type ListenerItem = [any, (...args: any[]) => any]
 type EmitCacheItem = any[]
 type WatchCb = (data: WatchDataItem) => void
 
+const optionsCtxMap = new WeakMap<AsyncEventChannelCtx, ConstructorParameters<typeof AsyncEventChannel>>()
+
+function asserts_on(cb: unknown): asserts cb is ListenerItem[1] {
+  if (typeof cb !== 'function')
+    throw new Error('The callback function must be passed')
+}
+function asserts_emit(args: EmitCacheItem): asserts args is [EmitCacheItem[0], ...EmitCacheItem] {
+  if (args.length === 0)
+    throw new Error('The event type must be passed')
+}
+function asserts_off(types: any[]): asserts types is [any, ...any[]] {
+  if (types.length === 0)
+    throw new Error('At least one event type is required')
+}
+function asserts_watch(args: any[]): asserts args is [WatchCb] | [any, WatchCb] {
+  if (typeof args[0] !== 'function' && typeof args[1] !== 'function')
+    throw new Error('The callback function must be passed')
+}
+function asserts_hasId(id: unknown): asserts id is number {
+  if (typeof id !== 'number')
+    throw new Error('The id must be a number')
+}
+
 /**
  * Async event channel 异步事件通道
  * @description Event channel support for asynchronous events support for event caching support for event listening once support for synchronous triggering events support for asynchronous triggering events support for event listening processes 事件通道，支持异步事件，支持事件缓存，支持事件监听一次，支持同步触发事件，支持异步触发事件，支持事件监听流程
@@ -136,6 +159,7 @@ export default class AsyncEventChannel {
     if (optionsMap && !(optionsMap instanceof Map)) {
       throw new Error('optionsMap must be an instance of Map')
     }
+    optionsCtxMap.set(this, [options, optionsMap])
     Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.#id })
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
@@ -191,9 +215,7 @@ export default class AsyncEventChannel {
    * @returns Cancel listening function 取消监听函数
    */
   on = (type: ListenerItem[0], cb: ListenerItem[1]) => {
-    if (typeof cb !== 'function') {
-      throw new Error('The callback function must be passed')
-    }
+    asserts_on(cb)
     const _cb = (...args: Parameters<typeof cb>) => {
       const _run = cb(...args)
       this.#watchCbs.forEach((watchCb) => watchCb({
@@ -294,9 +316,7 @@ export default class AsyncEventChannel {
    * @returns Cancel trigger function, return value of listener function, whether asynchronous, asynchronous completion function 取消触发函数、监听函数的返回值、是否异步、异步完成函数
    */
   emit = (...args: EmitCacheItem) => {
-    if (args.length === 0) {
-      throw new Error('The event type must be passed')
-    }
+    asserts_emit(args)
     const [type, ...params] = args
     const run = this.#emit(...args)
     this.#watchCbs.forEach((watchCb) => watchCb({
@@ -377,9 +397,7 @@ export default class AsyncEventChannel {
    * @returns The total number of events canceled and the total number of cache events canceled 取消监听的事件总数、取消缓存的事件总数
    */
   off = (...types: any[]) => {
-    if (types.length === 0) {
-      throw new Error('At least one event type is required')
-    }
+    asserts_off(types)
     const totals = this.#off(...types)
     types.forEach((type) => {
       this.#watchCbs.forEach((watchCb) => watchCb({
@@ -410,9 +428,7 @@ export default class AsyncEventChannel {
    * @returns Cancel listening function 取消监听函数
    */
   once = (type: ListenerItem[0], cb: ListenerItem[1]) => {
-    if (typeof cb !== 'function') {
-      throw new Error('The callback function must be passed')
-    }
+    asserts_on(cb)
     const _cb = (...args: Parameters<typeof cb>) => {
       const _run = cb(...args)
       this.#watchCbs.forEach((watchCb) => watchCb({
@@ -464,9 +480,7 @@ export default class AsyncEventChannel {
    * @returns The return value of the listener function 监听函数的返回值
    */
   immedEmit = (...args: EmitCacheItem) => {
-    if (args.length === 0) {
-      throw new Error('The event type must be passed')
-    }
+    asserts_emit(args)
     const [type, ...params] = args
     this.#watchCbs.forEach((watchCb) => watchCb({
       event: 'immedEmit',
@@ -514,9 +528,7 @@ export default class AsyncEventChannel {
    * @returns Cancel trigger function, Promise 取消触发函数、Promise
    */
   asyncEmit = (...args: EmitCacheItem) => {
-    if (args.length === 0) {
-      throw new Error('The event type must be passed')
-    }
+    asserts_emit(args)
     const [type, ...params] = args
     const { id, promise, cancel } = this.#asyncEmit(...args)
     this.#watchCbs.forEach((watchCb) => watchCb({
@@ -566,11 +578,9 @@ export default class AsyncEventChannel {
    * @returns Cancel listening function 取消监听函数
    */
   watch = (...args: [WatchCb] | [any, WatchCb]) => {
+    asserts_watch(args)
     const _args = args.slice(0, 2)
     const cb = _args[_args.length - 1]
-    if (typeof cb !== 'function') {
-      throw new Error('The callback function must be passed')
-    }
     let _cb = cb as WatchCb & { id: number }
     if (_args.length > 1) {
       _cb = ((data) => data.type === _args[0] && cb(data)) as typeof _cb
@@ -594,6 +604,7 @@ export default class AsyncEventChannel {
    * @returns Whether it exists 是否存在
    */
   hasId = (id: number) => {
+    asserts_hasId(id)
     for (const set of [this.#listener, this.#emitCache, this.#watchCbs]) {
       for (const item of set) {
         if (item.id === id) return true
