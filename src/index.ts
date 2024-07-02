@@ -80,6 +80,7 @@ export type AsyncEventChannelOptions = typeof AsyncEventChannel['defaultOptions'
 export type CurrentDataItem = {
   id: string
   event: 'on' | 'emit' | 'once' | 'asyncEmit' | 'watch'
+  type?: any
   value: Parameters<
     | AsyncEventChannel['on']
     | AsyncEventChannel['emit']
@@ -123,6 +124,14 @@ function asserts_hasId(id: unknown): asserts id is string {
     throw new Error('The id must be a string')
 }
 
+function importParamSsort(datas: Optional<CurrentDataItem, 'id'>[]) {
+  datas.sort((a, b) => {
+    const _a = a.id ? a.id.split(':')[1] : '0'
+    const _b = b.id ? b.id.split(':')[1] : '0'
+    return +_a - +_b
+  })
+}
+
 /**
  * Async event channel 异步事件通道
  * @description Event channel support for asynchronous events support for event caching support for event listening once support for synchronous triggering events support for asynchronous triggering events support for event listening processes 事件通道，支持异步事件，支持事件缓存，支持事件监听一次，支持同步触发事件，支持异步触发事件，支持事件监听流程
@@ -133,8 +142,12 @@ export default class AsyncEventChannel {
     isEmitOnce: false,
     isOnOnce: false,
   }
-  static #id = 0;
-  #processId = '';
+  static #id = 0
+  #_id = ++AsyncEventChannel.#id
+  get id() {
+    return this.#_id
+  }
+  #processId = ''
   #options
   #optionsMap
   #listener = createSet<ListenerItem & { id: string }>()
@@ -160,7 +173,6 @@ export default class AsyncEventChannel {
       throw new Error('optionsMap must be an instance of Map')
     }
     optionsCtxMap.set(this, [options, optionsMap])
-    Object.defineProperty(this, 'id', { value: ++AsyncEventChannel.#id })
     this.#processId = `${AsyncEventChannel.#id}:0`
     this.#options = options || {}
     this.#optionsMap = optionsMap || new Map()
@@ -268,6 +280,7 @@ export default class AsyncEventChannel {
     this.#currentData.set(run.id, {
       id: run.id,
       event: 'on',
+      type,
       value: [type, cb]
     })
     return run
@@ -373,6 +386,7 @@ export default class AsyncEventChannel {
     run.async && this.#currentData.set(run.id, {
       id: run.id,
       event: 'emit',
+      type,
       value: args
     })
     return run
@@ -470,6 +484,7 @@ export default class AsyncEventChannel {
     this.#currentData.set(run.id, {
       id: run.id,
       event: 'once',
+      type,
       value: [type, cb]
     })
     return run
@@ -511,8 +526,8 @@ export default class AsyncEventChannel {
       const run = this.emit(...args)
       id = run.id
       cancel = (reason?: any) => {
-        run.cancel()
         reject(reason)
+        return run.cancel()
       }
       if (run.async) {
         run.done = resolve
@@ -521,7 +536,7 @@ export default class AsyncEventChannel {
       }
     })
     id = id as unknown as string
-    cancel = cancel as unknown as (reason?: any) => void
+    cancel = cancel as unknown as (reason?: any) => boolean
     return {
       id,
       promise,
@@ -569,6 +584,7 @@ export default class AsyncEventChannel {
     this.#currentData.set(id, {
       id,
       event: 'asyncEmit',
+      type,
       value: args
     })
     _promise.finally(() => this.#currentData.delete(id))
@@ -597,7 +613,8 @@ export default class AsyncEventChannel {
     this.#currentData.set(_cb.id, {
       id: _cb.id,
       event: 'watch',
-      value: args
+      value: args,
+      ...(args.length > 1 ? { type: args[0] } : {})
     })
     return {
       id: _cb.id,
@@ -644,14 +661,10 @@ export default class AsyncEventChannel {
    * data import 数据导入
    * @param data Event listener data, event cache data, monitoring process data 事件监听器数据、事件缓存数据、监听流程数据
    */
-  import = (...data: Optional<CurrentDataItem, 'id'>[]) => {
+  import = (...datas: Optional<CurrentDataItem, 'id'>[]) => {
     const events = ['on', 'emit', 'once', 'asyncEmit', 'watch']
-    data.sort((a, b) => {
-      const _a = a.id ? a.id.split(':')[1] : '0'
-      const _b = b.id ? b.id.split(':')[1] : '0'
-      return +_a - +_b
-    })
-    return data.map((item) => {
+    importParamSsort(datas)
+    return datas.map((item) => {
       if (!events.includes(item.event)) {
         throw new Error('Unsupported operation type')
       }
@@ -670,33 +683,246 @@ export default class AsyncEventChannel {
   }
 }
 
+type ECHandler = 'on' | 'emit' | 'off' | 'watch'
 /**
  * Cancel function scope for asynchronous event channels 异步事件通道的取消函数作用域
  * @description Proxy asynchronous event channel instances, listen to events of asynchronous event channel instances, cancel all event listeners 代理异步事件通道实例，监听异步事件通道实例的事件，取消所有事件监听
  * @param ctx Asynchronous event channel instance 异步事件通道实例
  * @returns Proxy instance, cancel function 代理实例、取消函数
  */
-export function asyncEventChannelScope(ctx: AsyncEventChannelCtx) {
-  const watchiInclude = ['on', 'emit', 'once', 'asyncEmit', 'watch']
-  const cancels = new Set<() => void>()
+export function asyncEventChannelScope(
+  ctx: AsyncEventChannelCtx,
+  options: {
+    include?: {
+      type: any
+      handlers: boolean | ECHandler[]
+    }[]
+    exclude?: {
+      type: any
+      handlers: boolean | ECHandler[]
+    }[]
+  } = {}
+) {
+  if (!ctx) {
+    throw new Error('The instance must be passed')
+  }
+  if (!optionsCtxMap.has(ctx)) {
+    throw new Error('The instance is not an instance of AsyncEventChannel')
+  }
+  if (options.include && options.exclude) {
+    throw new Error('include and exclude cannot be passed at the same time')
+  }
+  let _ctx: AsyncEventChannelCtx | null = null
+  if (options.include || options.exclude) {
+    _ctx = new AsyncEventChannel(...optionsCtxMap.get(ctx)!)
+  }
+  let getCtx = (_type: any) => ctx
+  if (options.include) {
+    getCtx = (type) => {
+      const valid = options.include!.some((item) => item.type === type)
+      return valid ? ctx : _ctx!
+    }
+  } else if (options.exclude) {
+    getCtx = (type) => {
+      const valid = options.exclude!.some((item) => item.type === type)
+      return valid ? _ctx! : ctx
+    }
+  }
+  let getCtxAndAsserts = (_type: any, _handler: ECHandler) => ctx
+  {
+    function asserts(
+      list: NonNullable<typeof options.include | typeof options.exclude>,
+      y_ctx: AsyncEventChannelCtx,
+      n_ctx: AsyncEventChannelCtx
+    ) {
+      return function (type, handler) {
+        const err = new Error('The event type is not included or excluded')
+        return list.some((item) => {
+          if (item.type !== type) return false
+          if (typeof item.handlers === 'boolean') {
+            if (item.handlers === true) return true
+            throw err
+          }
+          if (item.handlers.includes(handler)) return true
+          throw err
+        }) ? y_ctx : n_ctx
+      } as typeof getCtxAndAsserts
+    }
+    if (options.include) {
+      getCtxAndAsserts = asserts(options.include, ctx, _ctx!)
+    } else if (options.exclude) {
+      getCtxAndAsserts = asserts(options.exclude, _ctx!, ctx)
+    }
+  }
+  const runs = new Map<string, () => boolean>()
+  const recordRun = <T extends {
+    id: string
+    cancel(): boolean
+  }>(run: T) => {
+    runs.set(run.id, run.cancel)
+    return run
+  }
+  const ctxProxy: {
+    [key in keyof AsyncEventChannelCtx as key extends `#${string}` ? never : key]: AsyncEventChannelCtx[key]
+  } = {
+    get id() {
+      return ctx.id
+    },
+    on(type, cb) {
+      asserts_on(cb)
+      return recordRun(
+        getCtxAndAsserts(type, 'on').on(type, cb)
+      )
+    },
+    emit(...args) {
+      asserts_emit(args)
+      return recordRun(
+        getCtxAndAsserts(args[0], 'emit').emit(...args)
+      )
+    },
+    off(...types) {
+      asserts_off(types)
+      const totals = {
+        listener: [] as string[],
+        emitCache: [] as string[],
+      }
+      types.forEach((type) => {
+        const _totals = getCtxAndAsserts(type, 'off').off(type)
+        totals.emitCache.push(..._totals.emitCache)
+        totals.listener.push(..._totals.listener)
+      })
+      return totals
+    },
+    once(type, cb) {
+      asserts_on(cb)
+      return recordRun(
+        getCtxAndAsserts(type, 'on').once(type, cb)
+      )
+    },
+    immedEmit(...args) {
+      asserts_emit(args)
+      return getCtxAndAsserts(args[0], 'emit').immedEmit(...args)
+    },
+    asyncEmit(...args) {
+      asserts_emit(args)
+      return recordRun(
+        getCtxAndAsserts(args[0], 'emit').asyncEmit(...args)
+      )
+    },
+    watch(...args) {
+      asserts_watch(args)
+      const _args = args.slice(0, 2)
+      const cb = _args[_args.length - 1]
+      const _cb = (data: WatchDataItem) => {
+        if (options.include) {
+          const valid = options.include.some((item) => item.type === data.type)
+          if (!valid) return
+        } else if (options.exclude) {
+          const valid = options.exclude.some((item) => item.type === data.type)
+          if (valid) return
+        }
+        cb(data)
+      }
+      if (_args.length > 1) {
+        return recordRun(
+          getCtxAndAsserts(args[0], 'watch').watch(args[0], cb)
+        )
+      }
+      const run = ctx.watch(_cb)
+      if (_ctx) {
+        const { cancel } = _ctx.watch(_cb)
+        const _cancel = run.cancel
+        run.cancel = () => {
+          cancel()
+          return _cancel()
+        }
+      }
+      return recordRun(run)
+    },
+    hasId(id) {
+      asserts_hasId(id)
+      return ctx.hasId(id) || (_ctx ? _ctx.hasId(id) : false)
+    },
+    hasType(type) {
+      return getCtx(type).hasType(type)
+    },
+    export() {
+      return ctx.export().concat(_ctx ? _ctx.export() : []).filter((item) => runs.has(item.id))
+    },
+    import(...datas) {
+      const runList: ReturnType<AsyncEventChannelCtx['import']> = []
+      const datas1: typeof datas = []
+      const datas2: typeof datas = []
+      const datas_watch: typeof datas = []
+      datas.forEach((data) => {
+        if (data.event === 'watch' && data.value.length === 1) {
+          datas_watch.push(data)
+          return
+        }
+        if (options.include) {
+          const valid = options.include.some((item) => item.type === data.type)
+          valid ? datas1.push(data) : datas2.push(data)
+        } else if (options.exclude) {
+          const valid = options.exclude.some((item) => item.type === data.type)
+          valid ? datas2.push(data) : datas1.push(data)
+        } else {
+          datas1.push(data)
+        }
+      })
+      if (_ctx) {
+        const _datas = datas_watch.map((data) => {
+          const cb: WatchCb = data.value[0]
+          const _cb: WatchCb = (_data) => {
+            if (options.include) {
+              const valid = options.include.some((item) => item.type === _data.type)
+              if (!valid) return
+            } else if (options.exclude) {
+              const valid = options.exclude.some((item) => item.type === _data.type)
+              if (valid) return
+            }
+            cb(_data)
+          }
+          return {
+            ...data,
+            value: [_cb]
+          }
+        })
+        datas1.push(..._datas)
+        datas2.push(..._datas)
+      } else {
+        datas1.push(...datas_watch)
+      }
+      importParamSsort(datas1)
+      importParamSsort(datas2)
+      runList.push(...ctx.import(...datas1))
+      if (_ctx) {
+        const _runList = _ctx.import(...datas2)
+        datas1.forEach((item, index) => {
+          if (item.event === 'watch' && item.value.length === 1) {
+            const subIndex = datas2.indexOf(item)
+            const subCancel = _runList[subIndex].cancel
+            const _cancel = runList[index].cancel
+            runList[index].cancel = () => {
+              subCancel()
+              return _cancel()
+            }
+            _runList.splice(subIndex, 1)
+          }
+        })
+        runList.push(..._runList)
+      }
+      return runList
+    }
+  }
   return {
     ctx: new Proxy(ctx, {
-      get(target, propKey) {
-        let origin = Reflect.get.call(ctx, target, propKey)
-        if (typeof origin === 'function') {
-          origin = origin.bind(ctx)
-        }
-        if (!watchiInclude.includes(propKey as string)) return origin
-        return (...args: any[]) => {
-          const run = origin.call(ctx, ...args)
-          cancels.add(run.cancel)
-          return run
-        }
+      get(_, propKey: keyof AsyncEventChannelCtx) {
+        return ctxProxy[propKey]
       }
     }),
     cancel() {
-      cancels.forEach((cancel) => cancel.call(ctx))
-      cancels.clear()
+      runs.forEach((cancel) => cancel())
+      runs.clear()
     },
   }
 }
