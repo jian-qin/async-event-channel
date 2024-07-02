@@ -241,6 +241,21 @@ const valuesAgain = channel.immedEmit('once');
 console.log(valuesAgain); // []
 ```
 
+## Listen to events once immediately (two-way communication)
+
+```javascript
+// Never trigger events
+channel.immedOnce('immedOnce', function() {
+  console.log('before');
+});
+
+channel.emit('immedOnce');
+
+channel.immedOnce('immedOnce', function() {
+  console.log('after'); // after
+});
+```
+
 ## Unified collection of cancel events
 
 ```javascript
@@ -265,6 +280,41 @@ console.log(values); // []
 // Only events on the proxy instance will be canceled
 const valuesAgain = channel.immedEmit('cancel');
 console.log(valuesAgain); // ["cancel event again"]
+```
+
+## Configure the event type list for scope isolation
+
+```javascript
+import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
+
+const channel = new AsyncEventChannel();
+const { ctx } = asyncEventChannelScope(channel, {
+  include: [
+    {
+      type: 'only',
+      handlers: ['emit']
+    }
+  ]
+});
+
+ctx.emit('only', 'only trigger event');
+
+// Registering or canceling events will throw an error
+// ctx.on('only', function() {});
+// ctx.off('only');
+
+// Events can only be registered on the original event channel
+channel.on('only', function(res) {
+  console.log(res); // only trigger event
+});
+
+// Events outside the list are not affected
+ctx.on('other', function() {
+  return 'other event';
+});
+
+const values = ctx.immedEmit('other');
+console.log(values[0]); // other event
 ```
 
 ## Disable asynchronous triggering events

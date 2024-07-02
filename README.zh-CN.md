@@ -241,6 +241,21 @@ const valuesAgain = channel.immedEmit('once');
 console.log(valuesAgain); // []
 ```
 
+## 立即监听事件一次（双向通信）
+
+```javascript
+// 永远不会触发事件
+channel.immedOnce('immedOnce', function() {
+  console.log('之前');
+});
+
+channel.emit('immedOnce');
+
+channel.immedOnce('immedOnce', function() {
+  console.log('之后'); // 之后
+});
+```
+
 ## 取消事件的统一收集
 
 ```javascript
@@ -265,6 +280,41 @@ console.log(values); // []
 // 仅取消代理实例上的事件
 const valuesAgain = channel.immedEmit('cancel');
 console.log(valuesAgain); // ["再次取消事件"]
+```
+
+## 配置事件类型名单进行作用域隔离
+
+```javascript
+import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
+
+const channel = new AsyncEventChannel();
+const { ctx } = asyncEventChannelScope(channel, {
+  include: [
+    {
+      type: 'only',
+      handlers: ['emit']
+    }
+  ]
+});
+
+ctx.emit('only', '仅支持触发事件');
+
+// 注册或取消事件会报错
+// ctx.on('only', function() {});
+// ctx.off('only');
+
+// 只能在原事件通道上注册事件
+channel.on('only', function(res) {
+  console.log(res); // 仅支持触发事件
+});
+
+// 名单外的事件类型不受影响
+ctx.on('other', function() {
+  return '其他事件';
+});
+
+const values = ctx.immedEmit('other');
+console.log(values[0]); // 其他事件
 ```
 
 ## 设置禁用异步触发事件

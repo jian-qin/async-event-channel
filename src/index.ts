@@ -91,7 +91,7 @@ export type CurrentDataItem = {
 }
 export type WatchDataItem = {
   id?: string
-  event: 'on' | 'emit' | 'once' | 'immedEmit' | 'asyncEmit' | 'off'
+  event: 'on' | 'emit' | 'once' | 'immedOnce' | 'immedEmit' | 'asyncEmit' | 'off'
   progress: 'register' | 'run' | 'cancel' | 'delete'
   type: any
   value: any
@@ -490,6 +490,37 @@ export default class AsyncEventChannel {
     return run
   }
 
+  #immedOnce(type: ListenerItem[0], cb: ListenerItem[1]) {
+    const valid = Array.from(this.#emitCache).some((item) => item[0] === type)
+    valid && this.once(type, cb)
+    return valid
+  }
+
+  /**
+   * 立即监听事件一次
+   * @description Determine whether there is a cache event, if so, immediately listen to the event once, otherwise do not register the listening event 判断是否有缓存事件，有则立即监听一次事件，没有则不注册监听事件
+   * @param type Event type 事件类型
+   * @param cb Callback function 回调函数
+   * @returns Whether to listen 是否监听
+   */
+  immedOnce = (type: ListenerItem[0], cb: ListenerItem[1]) => {
+    asserts_on(cb)
+    const run = this.#immedOnce(type, cb)
+    this.#watchCbs.forEach((watchCb) => watchCb({
+      event: 'immedOnce',
+      progress: 'register',
+      type,
+      value: cb,
+    }))
+    run && this.#watchCbs.forEach((watchCb) => watchCb({
+      event: 'immedOnce',
+      progress: 'run',
+      type,
+      value: run,
+    }))
+    return run
+  }
+
   #immedEmit(...args: EmitCacheItem) {
     const run = this.emit(...args)
     run.async && run.cancel()
@@ -685,9 +716,10 @@ export default class AsyncEventChannel {
 
 type ECHandler = 'on' | 'emit' | 'off' | 'watch'
 /**
- * Cancel function scope for asynchronous event channels 异步事件通道的取消函数作用域
- * @description Proxy asynchronous event channel instances, listen to events of asynchronous event channel instances, cancel all event listeners 代理异步事件通道实例，监听异步事件通道实例的事件，取消所有事件监听
+ * 异步事件通道作用域
+ * @description Proxy asynchronous event channel instance, automatically collect the returned cancel event, configure the list of included or excluded event types for scope isolation 代理异步事件通道实例，自动收集返回的取消事件，配置包含或排除的事件类型名单进行作用域隔离
  * @param ctx Asynchronous event channel instance 异步事件通道实例
+ * @param options Configuration options 配置选项
  * @returns Proxy instance, cancel function 代理实例、取消函数
  */
 export function asyncEventChannelScope(
@@ -716,6 +748,7 @@ export function asyncEventChannelScope(
   if (options.include || options.exclude) {
     _ctx = new AsyncEventChannel(...optionsCtxMap.get(ctx)!)
   }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let getCtx = (_type: any) => ctx
   if (options.include) {
     getCtx = (type) => {
@@ -728,31 +761,30 @@ export function asyncEventChannelScope(
       return valid ? _ctx! : ctx
     }
   }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let getCtxAndAsserts = (_type: any, _handler: ECHandler) => ctx
-  {
-    function asserts(
-      list: NonNullable<typeof options.include | typeof options.exclude>,
-      y_ctx: AsyncEventChannelCtx,
-      n_ctx: AsyncEventChannelCtx
-    ) {
-      return function (type, handler) {
-        const err = new Error('The event type is not included or excluded')
-        return list.some((item) => {
-          if (item.type !== type) return false
-          if (typeof item.handlers === 'boolean') {
-            if (item.handlers === true) return true
-            throw err
-          }
-          if (item.handlers.includes(handler)) return true
+  function asserts(
+    list: NonNullable<typeof options.include | typeof options.exclude>,
+    y_ctx: AsyncEventChannelCtx,
+    n_ctx: AsyncEventChannelCtx
+  ) {
+    return function (type, handler) {
+      const err = new Error('The event type is not included or excluded')
+      return list.some((item) => {
+        if (item.type !== type) return false
+        if (typeof item.handlers === 'boolean') {
+          if (item.handlers === true) return true
           throw err
-        }) ? y_ctx : n_ctx
-      } as typeof getCtxAndAsserts
-    }
-    if (options.include) {
-      getCtxAndAsserts = asserts(options.include, ctx, _ctx!)
-    } else if (options.exclude) {
-      getCtxAndAsserts = asserts(options.exclude, _ctx!, ctx)
-    }
+        }
+        if (item.handlers.includes(handler)) return true
+        throw err
+      }) ? y_ctx : n_ctx
+    } as typeof getCtxAndAsserts
+  }
+  if (options.include) {
+    getCtxAndAsserts = asserts(options.include, ctx, _ctx!)
+  } else if (options.exclude) {
+    getCtxAndAsserts = asserts(options.exclude, _ctx!, ctx)
   }
   const runs = new Map<string, () => boolean>()
   const recordRun = <T extends {
@@ -798,6 +830,10 @@ export function asyncEventChannelScope(
       return recordRun(
         getCtxAndAsserts(type, 'on').once(type, cb)
       )
+    },
+    immedOnce(type, cb) {
+      asserts_on(cb)
+      return getCtxAndAsserts(type, 'on').immedOnce(type, cb)
     },
     immedEmit(...args) {
       asserts_emit(args)
