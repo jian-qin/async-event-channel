@@ -317,6 +317,24 @@ const values = ctx.immedEmit('other');
 console.log(values[0]); // other event
 ```
 
+## Generate fixed event types
+
+```javascript
+import AsyncEventChannel, { useCreateEventChannel } from 'async-event-channel';
+
+const channel = new AsyncEventChannel();
+const createEventChannel = useCreateEventChannel(channel);
+
+const fixed = createEventChannel();
+
+fixed.on(function() {
+  return 'fixed event';
+});
+
+const values = fixed.immedEmit();
+console.log(values[0]); // fixed event
+```
+
 ## Disable asynchronous triggering events
 
 ```javascript

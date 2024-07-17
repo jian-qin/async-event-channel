@@ -317,6 +317,24 @@ const values = ctx.immedEmit('other');
 console.log(values[0]); // 其他事件
 ```
 
+## 生成固定的事件类型
+
+```javascript
+import AsyncEventChannel, { useCreateEventChannel } from 'async-event-channel';
+
+const channel = new AsyncEventChannel();
+const createEventChannel = useCreateEventChannel(channel);
+
+const fixed = createEventChannel();
+
+fixed.on(function() {
+  return '固定事件';
+});
+
+const values = fixed.immedEmit();
+console.log(values[0]); // 固定事件
+```
+
 ## 设置禁用异步触发事件
 
 ```javascript

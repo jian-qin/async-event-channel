@@ -1,3 +1,8 @@
+/**
+ * Remove the first item of the tuple 元组去掉第一项
+ */
+type TupleShift<T extends any[]> = T extends [any?, ...infer U] ? U : never
+
 function createSet<T extends any[]>() {
   type Cb = (...args: any[]) => void
   type Item = ([Cb] | [any, Cb]) & { _one?: boolean }
@@ -122,6 +127,15 @@ function asserts_watch(args: any[]): asserts args is [WatchCb] | [any, WatchCb] 
 function asserts_hasId(id: unknown): asserts id is string {
   if (typeof id !== 'string')
     throw new Error('The id must be a string')
+}
+
+function asserts_ctx(ctx: any): asserts ctx is AsyncEventChannelCtx {
+  if (!ctx) {
+    throw new Error('The instance must be passed')
+  }
+  if (!optionsCtxMap.has(ctx)) {
+    throw new Error('The instance is not an instance of AsyncEventChannel')
+  }
 }
 
 function importParamSsort(datas: Optional<CurrentDataItem, 'id'>[]) {
@@ -735,12 +749,7 @@ export function asyncEventChannelScope(
     }[]
   } = {}
 ) {
-  if (!ctx) {
-    throw new Error('The instance must be passed')
-  }
-  if (!optionsCtxMap.has(ctx)) {
-    throw new Error('The instance is not an instance of AsyncEventChannel')
-  }
+  asserts_ctx(ctx)
   if (options.include && options.exclude) {
     throw new Error('include and exclude cannot be passed at the same time')
   }
@@ -960,6 +969,46 @@ export function asyncEventChannelScope(
       runs.forEach((cancel) => cancel())
       runs.clear()
     },
+  }
+}
+
+/**
+ * Generate fixed event types 生成固定的事件类型
+ * @param ctx Asynchronous event channel instance 异步事件通道实例
+ * @returns Event type generator 事件类型生成器
+ */
+export function useCreateEventChannel(ctx: AsyncEventChannelCtx) {
+  asserts_ctx(ctx)
+  const types = new WeakSet<any>()
+  const yesParams = ['on', 'emit', 'once', 'immedOnce', 'immedEmit', 'asyncEmit', 'watch'] as const
+  const noParams = ['off', 'hasType'] as const
+  return (type: any = Symbol()) => {
+    if (types.has(type)) {
+      throw new Error('The event type already exists')
+    }
+    types.add(type)
+    const _target = { $type: type }
+    return new Proxy(_target, {
+      get(target, propKey) {
+        // @ts-ignore
+        if (yesParams.includes(propKey)) {
+          // @ts-ignore
+          return (...args) => ctx[propKey](type, ...args)
+        }
+        // @ts-ignore
+        if (noParams.includes(propKey)) {
+          // @ts-ignore
+          return () => ctx[propKey](type)
+        }
+        return Reflect.get(target, propKey)
+      }
+    }) as {
+      [K in Exclude<typeof yesParams[number], 'watch'>]: (...args: TupleShift<Parameters<AsyncEventChannelCtx[K]>>) => ReturnType<AsyncEventChannelCtx[K]>
+    } & {
+      watch(cb: WatchCb): ReturnType<AsyncEventChannelCtx['watch']>
+    } & {
+      [K in typeof noParams[number]]: () => ReturnType<AsyncEventChannelCtx[K]>
+    } & typeof _target
   }
 }
 
