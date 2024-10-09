@@ -112,7 +112,7 @@ channel.on('get', function(data) {
 });
 
 // 如果未注册事件，将获得 undefined
-const values = channel.immedEmit('get', '事件数据');
+const values = channel.immedEmit('get', '事件数据').values;
 console.log(values[0]); // 返回值
 ```
 
@@ -126,7 +126,7 @@ const { cancel } = channel.on('cancel', function() {
 // 取消侦听事件
 cancel();
 
-const values = channel.immedEmit('cancel');
+const values = channel.immedEmit('cancel').values;
 console.log(values); // []
 ```
 
@@ -156,7 +156,7 @@ channel.on('cancel', function() {
 
 channel.off('cancel');
 
-const values = channel.immedEmit('cancel');
+const values = channel.immedEmit('cancel').values;
 console.log(values); // []
 ```
 
@@ -183,7 +183,7 @@ const { id } = channel.on('watch', function() {
 const { id } = channel.on('exists', function() {});
 
 console.log(channel.hasId(id)); // true
-console.log(channel.hasType('exists')); // true
+console.log(channel.hasType('exists').has); // true
 ```
 
 ## 导入导出
@@ -203,11 +203,11 @@ const data = channel_old.export();
 channel_new.import(...data);
 
 // 导入事件通道数据后，可以使用导入的事件通道数据
-const values_new = channel_new.immedEmit('import');
+const values_new = channel_new.immedEmit('import').values;
 console.log(values_new[0]); // 导入事件
 
 // 相当于复制，不会影响原事件通道数据
-const values_old = channel_old.immedEmit('import');
+const values_old = channel_old.immedEmit('import').values;
 console.log(values_old[0]); // 导入事件
 ```
 
@@ -234,10 +234,10 @@ channel.once('once', function() {
   return '一次事件';
 });
 
-const values = channel.immedEmit('once');
+const values = channel.immedEmit('once').values;
 console.log(values[0]); // 一次事件
 
-const valuesAgain = channel.immedEmit('once');
+const valuesAgain = channel.immedEmit('once').values;
 console.log(valuesAgain); // []
 ```
 
@@ -274,11 +274,11 @@ channel.once('cancel', function() {
 // 取消所有事件
 cancel();
 
-const values = ctx.immedEmit('cancel');
+const values = ctx.immedEmit('cancel').values;
 console.log(values); // []
 
 // 仅取消代理实例上的事件
-const valuesAgain = channel.immedEmit('cancel');
+const valuesAgain = channel.immedEmit('cancel').values;
 console.log(valuesAgain); // ["再次取消事件"]
 ```
 
@@ -313,7 +313,7 @@ ctx.on('other', function() {
   return '其他事件';
 });
 
-const values = ctx.immedEmit('other');
+const values = ctx.immedEmit('other').values;
 console.log(values[0]); // 其他事件
 ```
 
@@ -331,7 +331,7 @@ fixed.on(function() {
   return '固定事件';
 });
 
-const values = fixed.immedEmit();
+const values = fixed.immedEmit().values;
 console.log(values[0]); // 固定事件
 ```
 
@@ -364,7 +364,7 @@ channel.on('once', function() {
   return '第二次一次事件';
 });
 
-const values = channel.immedEmit('once');
+const values = channel.immedEmit('once').values;
 console.log(values[0]); // 第二次一次事件
 ```
 

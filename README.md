@@ -112,7 +112,7 @@ channel.on('get', function(data) {
 });
 
 // If the event is not registered, undefined will be obtained
-const values = channel.immedEmit('get', 'event data');
+const values = channel.immedEmit('get', 'event data').values;
 console.log(values[0]); // return value
 ```
 
@@ -126,7 +126,7 @@ const { cancel } = channel.on('cancel', function() {
 // Cancel listening events
 cancel();
 
-const values = channel.immedEmit('cancel');
+const values = channel.immedEmit('cancel').values;
 console.log(values); // []
 ```
 
@@ -156,7 +156,7 @@ channel.on('cancel', function() {
 
 channel.off('cancel');
 
-const values = channel.immedEmit('cancel');
+const values = channel.immedEmit('cancel').values;
 console.log(values); // []
 ```
 
@@ -183,7 +183,7 @@ const { id } = channel.on('watch', function() {
 const { id } = channel.on('exists', function() {});
 
 console.log(channel.hasId(id)); // true
-console.log(channel.hasType('exists')); // true
+console.log(channel.hasType('exists').has); // true
 ```
 
 ## Import and export
@@ -203,11 +203,11 @@ const data = channel_old.export();
 channel_new.import(...data);
 
 // Equivalent to copy, does not affect the original event channel data
-const values_new = channel_new.immedEmit('import');
+const values_new = channel_new.immedEmit('import').values;
 console.log(values_new[0]); // import event
 
 // Equivalent to copy, does not affect the original event channel data
-const values_old = channel_old.immedEmit('import');
+const values_old = channel_old.immedEmit('import').values;
 console.log(values_old[0]); // import event
 ```
 
@@ -234,10 +234,10 @@ channel.once('once', function() {
   return 'once event';
 });
 
-const values = channel.immedEmit('once');
+const values = channel.immedEmit('once').values;
 console.log(values[0]); // once event
 
-const valuesAgain = channel.immedEmit('once');
+const valuesAgain = channel.immedEmit('once').values;
 console.log(valuesAgain); // []
 ```
 
@@ -274,11 +274,11 @@ channel.once('cancel', function() {
 // Cancel all events
 cancel();
 
-const values = ctx.immedEmit('cancel');
+const values = ctx.immedEmit('cancel').values;
 console.log(values); // []
 
 // Only events on the proxy instance will be canceled
-const valuesAgain = channel.immedEmit('cancel');
+const valuesAgain = channel.immedEmit('cancel').values;
 console.log(valuesAgain); // ["cancel event again"]
 ```
 
@@ -313,7 +313,7 @@ ctx.on('other', function() {
   return 'other event';
 });
 
-const values = ctx.immedEmit('other');
+const values = ctx.immedEmit('other').values;
 console.log(values[0]); // other event
 ```
 
@@ -331,7 +331,7 @@ fixed.on(function() {
   return 'fixed event';
 });
 
-const values = fixed.immedEmit();
+const values = fixed.immedEmit().values;
 console.log(values[0]); // fixed event
 ```
 
@@ -364,7 +364,7 @@ channel.on('once', function() {
   return 'once event again';
 });
 
-const values = channel.immedEmit('once');
+const values = channel.immedEmit('once').values;
 console.log(values[0]); // once event again
 ```
 
