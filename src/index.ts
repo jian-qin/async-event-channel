@@ -688,12 +688,13 @@ export default class AsyncEventChannel {
    * @returns Whether it exists 是否存在
    */
   hasType = (type: any) => {
-    for (const set of [this.#listener, this.#emitCache]) {
-      for (const item of set) {
-        if (item[0] === type) return true
-      }
+    const onIds = Array.from(this.#listener).filter((item) => item[0] === type).map((item) => item.id)
+    const emitIds = Array.from(this.#emitCache).filter((item) => item[0] === type).map((item) => item.id)
+    return {
+      onIds,
+      emitIds,
+      has: onIds.length > 0 || emitIds.length > 0,
     }
-    return false
   }
 
   /**
