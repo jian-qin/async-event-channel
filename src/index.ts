@@ -539,7 +539,10 @@ export default class AsyncEventChannel {
   #immedEmit(...args: EmitCacheItem) {
     const run = this.emit(...args)
     run.async && run.cancel()
-    return run.values
+    return {
+      id: run.id,
+      values: run.values,
+    }
   }
 
   /**
@@ -558,6 +561,7 @@ export default class AsyncEventChannel {
     }))
     const run = this.#immedEmit(...args)
     this.#watchCbs.forEach((watchCb) => watchCb({
+      id: run.id,
       event: 'immedEmit',
       progress: 'run',
       type,
