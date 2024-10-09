@@ -505,9 +505,9 @@ export default class AsyncEventChannel {
   }
 
   #immedOnce(type: ListenerItem[0], cb: ListenerItem[1]) {
-    const valid = Array.from(this.#emitCache).some((item) => item[0] === type)
-    valid && this.once(type, cb)
-    return valid
+    if (Array.from(this.#emitCache).some((item) => item[0] === type)) {
+      return this.once(type, cb)
+    }
   }
 
   /**
@@ -515,7 +515,7 @@ export default class AsyncEventChannel {
    * @description Determine whether there is a cache event, if so, immediately listen to the event once, otherwise do not register the listening event 判断是否有缓存事件，有则立即监听一次事件，没有则不注册监听事件
    * @param type Event type 事件类型
    * @param cb Callback function 回调函数
-   * @returns Whether to listen 是否监听
+   * @returns Possibly returns the return value of the listener function 可能返回监听函数的返回值
    */
   immedOnce = (type: ListenerItem[0], cb: ListenerItem[1]) => {
     asserts_on(cb)
@@ -527,6 +527,7 @@ export default class AsyncEventChannel {
       value: cb,
     }))
     run && this.#watchCbs.forEach((watchCb) => watchCb({
+      id: run.id,
       event: 'immedOnce',
       progress: 'run',
       type,
