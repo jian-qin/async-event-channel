@@ -985,7 +985,7 @@ export function asyncEventChannelScope(
  */
 export function useCreateEventChannel(ctx: AsyncEventChannelCtx) {
   asserts_ctx(ctx)
-  const types = new WeakSet<any>()
+  const types = new Set<any>()
   const yesParams = ['on', 'emit', 'once', 'immedOnce', 'immedEmit', 'asyncEmit', 'watch'] as const
   const noParams = ['off', 'hasType'] as const
   return (type: any = Symbol()) => {

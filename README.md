@@ -37,8 +37,6 @@ dom.dispatchEvent(new Event('click'));
 import AsyncEventChannel from 'async-event-channel';
 // or
 // const { default: AsyncEventChannel } = require('async-event-channel');
-// or
-// import AsyncEventChannel from 'async-event-channel/es5';
 
 // event communication instance
 const channel = new AsyncEventChannel();
@@ -92,7 +90,7 @@ console.log(result.values[0]); // return value
 
 ```javascript
 channel.asyncEmit('get', 'event data').promise.then(result => {
-  console.log(result.values[0]); // return value
+  console.log(result[0]); // return value
 });
 
 setTimeout(() => {
@@ -163,18 +161,20 @@ console.log(values); // []
 ## Listening process
 
 ```javascript
+let result = null;
+
 // Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
 channel.watch('watch', function(data) {
   // Note: The execution order of the listening process cannot be guaranteed
-  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
-  if (data.id === id) {
-    console.log('match success');
-  }
+  console.log(data); // { "id": "1:1", "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
+  result = data;
 });
 
 const { id } = channel.on('watch', function() {
   return 'watch event';
 });
+
+console.log(result?.id === id); // true
 ```
 
 ## Query whether it still exists
@@ -267,7 +267,7 @@ const { ctx, cancel } = asyncEventChannelScope(channel);
 ctx.on('cancel', function() {
   return 'cancel event';
 });
-channel.once('cancel', function() {
+ctx.once('cancel-again', function() {
   return 'cancel event again';
 });
 
@@ -277,9 +277,8 @@ cancel();
 const values = ctx.immedEmit('cancel').values;
 console.log(values); // []
 
-// Only events on the proxy instance will be canceled
-const valuesAgain = channel.immedEmit('cancel').values;
-console.log(valuesAgain); // ["cancel event again"]
+const valuesAgain = channel.immedEmit('cancel-again').values;
+console.log(valuesAgain); // []
 ```
 
 ## Configure the event type list for scope isolation
@@ -343,11 +342,9 @@ const channel = new AsyncEventChannel({ isEmitCache: false });
 channel.emit('disable', 'disable event');
 
 // Unable to receive events
-setTimeout(() => {
-  channel.on('disable', function(data) {
-    console.log(data);
-  });
-}, 1000);
+channel.on('disable', function(data) {
+  console.log(data);
+});
 ```
 
 ## The same channel can only register one event

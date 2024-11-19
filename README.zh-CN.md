@@ -37,8 +37,6 @@ dom.dispatchEvent(new Event('click'));
 import AsyncEventChannel from 'async-event-channel';
 // 或
 // const { default: AsyncEventChannel } = require('async-event-channel');
-// 或
-// import AsyncEventChannel from 'async-event-channel/es5';
 
 // 事件通信实例
 const channel = new AsyncEventChannel();
@@ -92,7 +90,7 @@ console.log(result.values[0]); // 返回值
 
 ```javascript
 channel.asyncEmit('get', '事件数据').promise.then(result => {
-  console.log(result.values[0]); // 返回值
+  console.log(result[0]); // 返回值
 });
 
 setTimeout(() => {
@@ -163,18 +161,20 @@ console.log(values); // []
 ## 监听过程
 
 ```javascript
+let result = null;
+
 // 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
 channel.watch('watch', function(data) {
   // 注意：无法保证监听过程的执行顺序
-  console.log(data); // { "id": 1, "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
-  if (data.id === id) {
-    console.log('匹配成功');
-  }
+  console.log(data); // { "id": "1:1", "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
+  result = data;
 });
 
 const { id } = channel.on('watch', function() {
   return '监听过程';
 });
+
+console.log(result?.id === id); // true
 ```
 
 ## 查询是否还存在
@@ -267,8 +267,8 @@ const { ctx, cancel } = asyncEventChannelScope(channel);
 ctx.on('cancel', function() {
   return '取消事件';
 });
-channel.once('cancel', function() {
-  return '再次取消事件';
+ctx.on('cancel-again', function () {
+  return '再次取消事件'
 });
 
 // 取消所有事件
@@ -277,9 +277,8 @@ cancel();
 const values = ctx.immedEmit('cancel').values;
 console.log(values); // []
 
-// 仅取消代理实例上的事件
-const valuesAgain = channel.immedEmit('cancel').values;
-console.log(valuesAgain); // ["再次取消事件"]
+const valuesAgain = channel.immedEmit('cancel-again').values;
+console.log(valuesAgain); // []
 ```
 
 ## 配置事件类型名单进行作用域隔离
@@ -343,11 +342,9 @@ const channel = new AsyncEventChannel({ isEmitCache: false });
 channel.emit('disable', '禁用事件');
 
 // 无法接收事件
-setTimeout(() => {
-  channel.on('disable', function(data) {
-    console.log(data);
-  });
-}, 1000);
+channel.on('disable', function(data) {
+  console.log(data);
+});
 ```
 
 ## 设置同一通道只能注册一个事件

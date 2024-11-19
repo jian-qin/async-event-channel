@@ -3,40 +3,24 @@
   "description": "Two-way communication asynchronous event channel",
   "version": "2.4.0",
   "main": "./dist/index.js",
-  "module": "./dist/index.esm.js",
-  "umd": "./dist/index.umd.js",
   "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.esm.js",
-      "require": "./dist/index.js"
-    },
-    "./es5": {
-      "types": "./es5/index.d.ts",
-      "import": "./es5/index.esm.js",
-      "require": "./es5/index.js"
-    }
-  },
   "files": [
     "dist",
-    "es5",
     "LICENSE",
     "README.md",
     "README.zh-CN.md",
     "package.json"
   ],
   "scripts": {
-    "build": "rimraf dist es5 && rollup -c && rollup -c rollup.config.es5.mjs",
-    "test": "echo \"no test specified\""
+    "build": "tsc",
+    "test": "jest"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.24.7",
-    "@rollup/plugin-babel": "^6.0.4",
-    "@rollup/plugin-typescript": "^11.1.6",
-    "rimraf": "^5.0.7",
-    "rollup": "^4.18.0",
-    "typescript": "^5.2.2"
+    "@babel/preset-env": "^7.26.0",
+    "@babel/preset-typescript": "^7.26.0",
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.6.3"
   },
   "repository": {
     "type": "git",
@@ -46,7 +30,6 @@
     "cache emit",
     "two-way communication",
     "scope cancel",
-    "task queue",
     "typescript"
   ],
   "author": "jian-qin",
