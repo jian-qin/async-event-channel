@@ -27,6 +27,7 @@ type EmitReturn<R extends ListenerReturns> = Promise<R> & {
 class Base {
   static on_ignore = '@o_i;'
   static on_cover = '@o_c;'
+  static emit_wait = '@e_w;'
   static emit_ignore = '@e_i;'
   static emit_cover = '@e_c;'
 
@@ -73,7 +74,11 @@ class Base {
       return syncResolve([...this._events.get(event)!].map((listener) => listener(...args)))
     }
 
-    if (!event.includes(Base.on_ignore) && !event.includes(Base.on_cover)) {
+    const isWait =
+      event.includes(Base.emit_wait) ||
+      event.includes(Base.emit_ignore) ||
+      event.includes(Base.emit_cover)
+    if (!isWait) {
       return syncResolve()
     }
 
@@ -93,10 +98,9 @@ class Base {
       rejects.push(reject)
     })
 
-    const unhook = this.hook.afterOn(event, () => {
-      const _result: any = []
-      this._events.get(event)!.forEach((listener) => _result.push(listener(...args)))
+    const unhook = this.hook.afterOn(event, ({ payload }) => {
       end()
+      const _result = payload[1](...args)
       resolves.forEach((resolve) => resolve(_result))
     })
 
