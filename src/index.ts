@@ -225,9 +225,12 @@ export default class EventChannel extends Base {
     }
     return !!this._emits.get(event)?.has(value)
   }
+
+  useScope = () => useScope(this)
+  useEvent = useEvent(this)
 }
 
-export const useScope = (instance: EventChannel) => {
+const useScope = (instance: EventChannel) => {
   type Instance = typeof instance
   type OffItem = [string, Listener | ReturnType<Instance['emit']>]
   type ProxyCtx = Instance & {
@@ -297,11 +300,9 @@ const randomString = (
   chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ) => Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 
-export const useEvent =
-  (instance: EventChannel, base = '') =>
-  <P extends Parameters<Listener>, R extends ListenerReturns = ListenerReturns>(
-    event = randomString(16)
-  ) => {
+const useEvent =
+  (instance: EventChannel) =>
+  <P extends Parameters<Listener>, R extends ListenerReturns = ListenerReturns>(base = '') => {
     type Instance = typeof instance
     type ProxyHookType = Exclude<keyof Instance['hook'], 'all'>
     type ProxyHook<T extends ProxyHookType = ProxyHookType> = {
@@ -321,7 +322,7 @@ export const useEvent =
       } & ProxyHook
     }
 
-    const _event = base + event
+    const _event = base + randomString(16)
     const keys = ['on', 'once', 'off', 'size', 'has'] as const
     const hook: ProxyCtx['hook'] = {
       all: instance.hook.all,
