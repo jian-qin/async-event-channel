@@ -16,6 +16,13 @@ type BaseHookResult<T extends HookType> =
     })
 type Hook = <T extends HookType>(result: BaseHookResult<T>) => void
 
+type ListenerReturns = ReturnType<Listener>[]
+type EmitReturn<R extends ListenerReturns> = Promise<R> & {
+  onResolve: (cb: (value: R) => void) => void
+  onReject?: (cb: (reason: 'cancel') => void) => void
+  cancel?: () => void
+}
+
 class Base {
   static on_ignore = '@o_i;'
   static on_cover = '@o_c;'
@@ -49,53 +56,63 @@ class Base {
     return () => this.off(event, listener)
   }
 
-  emit(
+  emit<R extends ListenerReturns = ListenerReturns>(
     event: string,
     ...args: Parameters<Listener>
-  ): Promise<ReturnType<Listener>[]> & { cancel?: () => void } {
+  ): EmitReturn<R> {
+    type Resolve = Parameters<EmitReturn<R>['onResolve']>[0]
+    type Reject = Parameters<NonNullable<EmitReturn<R>['onReject']>>[0]
+
+    const syncResolve = (result: any = []): any =>
+      Object.defineProperty(Promise.resolve(result), 'onResolve', {
+        value: (cb: Resolve) => cb(result),
+      })
+
     if (this._events.has(event)) {
-      const _result: ReturnType<Listener>[] = []
-      this._events.get(event)!.forEach((listener) => _result.push(listener(...args)))
-      return Promise.resolve(_result)
+      return syncResolve([...this._events.get(event)!].map((listener) => listener(...args)))
     }
 
-    if (!event.includes(Base.emit_ignore) && !event.includes(Base.emit_cover)) {
-      return Promise.resolve([])
+    if (!event.includes(Base.on_ignore) && !event.includes(Base.on_cover)) {
+      return syncResolve()
     }
 
     if (this._emits.has(event)) {
       if (event.includes(Base.emit_ignore)) {
-        return Promise.resolve([])
+        return syncResolve()
       }
       if (event.includes(Base.emit_cover)) {
         this.off(event, 'all_emit')
       }
     }
 
-    let _resolve: (value: ReturnType<Listener>[]) => void
-    let _reject: (reason: string) => void
-    const result = new Promise((resolve, reject) => {
-      _resolve = resolve
-      _reject = reject
-    }) as ReturnType<EventChannel['emit']>
+    const resolves: Resolve[] = []
+    const rejects: Reject[] = []
+    const result: any = new Promise((resolve, reject) => {
+      resolves.push(resolve)
+      rejects.push(reject)
+    })
 
     const unhook = this.hook.afterOn(event, () => {
-      const _result: ReturnType<Listener>[] = []
+      const _result: any = []
       this._events.get(event)!.forEach((listener) => _result.push(listener(...args)))
       end()
-      _resolve(_result)
+      resolves.forEach((resolve) => resolve(_result))
     })
 
     let cancel = () => {
       end()
-      _reject('cancel')
+      rejects.forEach((reject) => reject('cancel'))
     }
     const end = () => {
       unhook()
       cancel = () => {}
       this.off(event, result)
     }
-    Object.defineProperty(result, 'cancel', { value: () => cancel() })
+    Object.defineProperties(result, {
+      onResolve: { value: (cb: Resolve) => resolves.push(cb) },
+      onReject: { value: (cb: Reject) => rejects.push(cb) },
+      cancel: { value: () => cancel() },
+    })
     this._emits_item(event).add(result)
 
     return result
@@ -163,11 +180,14 @@ export default class EventChannel extends Base {
     return result
   }
 
-  emit: Base['emit'] = (event, ...args) => {
+  emit = <R extends ListenerReturns = ListenerReturns>(
+    event: Parameters<Base['emit']>[0],
+    ...args: Parameters<Base['emit']>[1]
+  ) => {
     this._hooks.forEach((hook) =>
       hook({ type: 'emit', position: 'before', payload: [event, ...args] })
     )
-    const result = super.emit(event, ...args)
+    const result = super.emit<R>(event, ...args)
     this._hooks.forEach((hook) =>
       hook({ type: 'emit', position: 'after', payload: [event, ...args], result })
     )
@@ -210,10 +230,11 @@ export default class EventChannel extends Base {
 }
 
 export const useScope = (instance: EventChannel) => {
+  type Instance = typeof instance
   const { proxy, revoke } = Proxy.revocable(instance, {
-    get(target, key) {
+    get<R extends ListenerReturns = ListenerReturns>(target: Instance, key: keyof Instance) {
       if (key === 'on' || key === 'once') {
-        const proxy: EventChannel['on'] = (event, listener) => {
+        const proxy: Instance['on'] = (event, listener) => {
           const result = instance[key](event, listener)
           result && scope._offs.add([event, listener])
           return result
@@ -221,8 +242,11 @@ export const useScope = (instance: EventChannel) => {
         return proxy
       }
       if (key === 'emit') {
-        const proxy: EventChannel['emit'] = (event, ...args) => {
-          const result = instance[key](event, ...args)
+        const proxy = (
+          event: Parameters<Instance['emit']>[0],
+          ...args: Parameters<Instance['emit']>[1]
+        ) => {
+          const result = instance[key]<R>(event, ...args)
           result.cancel && scope._offs.add([event, result])
           return result
         }
@@ -239,11 +263,11 @@ export const useScope = (instance: EventChannel) => {
       unhook()
       revoke()
     },
-  ] as [EventChannel, () => void] & {
-    _offs: Set<[string, Listener | ReturnType<EventChannel['emit']>]>
+  ] as [Instance, () => void] & {
+    _offs: Set<[string, Listener | ReturnType<Instance['emit']>]>
   }
   Object.defineProperty(scope, '_offs', {
-    value: new Set<[string, Listener | ReturnType<EventChannel['emit']>]>(),
+    value: new Set<[string, Listener | ReturnType<Instance['emit']>]>(),
   })
   const unhook = instance.hook.all((result) => {
     if (result.type === 'off' && result.position === 'after') {
@@ -262,7 +286,10 @@ const randomString = (
 
 export const useEvent =
   (instance: EventChannel, base = '') =>
-  <P extends Parameters<Listener>, R = undefined>(event = randomString(16)) => {
+  <P extends Parameters<Listener>, R extends ListenerReturns = ListenerReturns>(
+    event = randomString(16)
+  ) => {
+    type Instance = typeof instance
     const _event = base + event
     return [
       new Proxy(instance, {
@@ -275,10 +302,10 @@ export const useEvent =
           }
           return Reflect.get(target, key)
         },
-      }) as unknown as Omit<EventChannel, 'on' | 'once' | 'emit'> & {
-        on: (listener: (...args: P) => R) => ReturnType<EventChannel['on']>
-        once: (listener: (...args: P) => R) => ReturnType<EventChannel['once']>
-        emit: (...args: P) => ReturnType<EventChannel['emit']>
+      }) as unknown as Omit<Instance, 'on' | 'once' | 'emit'> & {
+        on: (listener: (...args: P) => R[number]) => ReturnType<Instance['on']>
+        once: (listener: (...args: P) => R[number]) => ReturnType<Instance['once']>
+        emit: (...args: P) => EmitReturn<R>
       },
       _event,
     ] as const
