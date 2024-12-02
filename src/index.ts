@@ -1,4 +1,6 @@
 type Listener = (...args: any[]) => any
+type ListenerReturns = ReturnType<Listener>[]
+
 type HookType = 'on' | 'emit' | 'off'
 type HookPosition = 'before' | 'after'
 type BaseHookResult<T extends HookType> =
@@ -16,7 +18,6 @@ type BaseHookResult<T extends HookType> =
     })
 type Hook = <T extends HookType>(result: BaseHookResult<T>) => void
 
-type ListenerReturns = ReturnType<Listener>[]
 type EmitReturn<R extends ListenerReturns> = Promise<R> & {
   onResolve: (cb: (value: R) => void) => void
   onReject?: (cb: (reason: 'cancel') => void) => void
@@ -81,7 +82,7 @@ class Base {
         return syncResolve()
       }
       if (event.includes(Base.emit_cover)) {
-        this.off(event, 'all_emit')
+        this.off(event, 'emit')
       }
     }
 
@@ -118,17 +119,14 @@ class Base {
     return result
   }
 
-  off(
-    event: string,
-    value: Listener | ReturnType<EventChannel['emit']> | 'all' | 'all_on' | 'all_emit'
-  ) {
+  off(event: string, value: Listener | ReturnType<EventChannel['emit']> | 'all' | 'on' | 'emit') {
     if (value === 'all') {
       this._events.delete(event)
       this._emits.get(event)?.forEach(({ cancel }) => cancel?.())
       this._emits.delete(event)
-    } else if (value === 'all_on') {
+    } else if (value === 'on') {
       this._events.delete(event)
-    } else if (value === 'all_emit') {
+    } else if (value === 'emit') {
       this._emits.get(event)?.forEach(({ cancel }) => cancel?.())
       this._emits.delete(event)
     } else if (typeof value === 'function') {
@@ -212,8 +210,8 @@ export default class EventChannel extends Base {
     return this.on(event, _listener)
   }
 
-  size = (event: string, type: 'on' | 'emit') =>
-    this[type === 'on' ? '_events' : '_emits'].get(event)?.size || 0
+  size = (event: string, value: 'on' | 'emit') =>
+    this[value === 'on' ? '_events' : '_emits'].get(event)?.size || 0
 
   has = (event: string, value: Listener | ReturnType<EventChannel['emit']> | 'on' | 'emit') => {
     if (value === 'on') {
@@ -231,12 +229,29 @@ export default class EventChannel extends Base {
 
 export const useScope = (instance: EventChannel) => {
   type Instance = typeof instance
+  type OffItem = [string, Listener | ReturnType<Instance['emit']>]
+  type ProxyCtx = Instance & {
+    _offs: typeof _offs
+    $clear: typeof clear
+    $destroy: typeof destroy
+  }
+
+  const _offs = new Set<OffItem>()
   const { proxy, revoke } = Proxy.revocable(instance, {
-    get<R extends ListenerReturns = ListenerReturns>(target: Instance, key: keyof Instance) {
+    get<R extends ListenerReturns = ListenerReturns>(target: ProxyCtx, key: keyof ProxyCtx) {
+      if (key === '_offs') {
+        return _offs
+      }
+      if (key === '$clear') {
+        return clear
+      }
+      if (key === '$destroy') {
+        return destroy
+      }
       if (key === 'on' || key === 'once') {
         const proxy: Instance['on'] = (event, listener) => {
           const result = instance[key](event, listener)
-          result && scope._offs.add([event, listener])
+          result && _offs.add([event, listener])
           return result
         }
         return proxy
@@ -247,7 +262,7 @@ export const useScope = (instance: EventChannel) => {
           ...args: Parameters<Instance['emit']>[1]
         ) => {
           const result = instance[key]<R>(event, ...args)
-          result.cancel && scope._offs.add([event, result])
+          result.cancel && _offs.add([event, result])
           return result
         }
         return proxy
@@ -255,28 +270,26 @@ export const useScope = (instance: EventChannel) => {
       return Reflect.get(target, key)
     },
   })
-  const scope = [
-    proxy,
-    () => {
-      scope._offs.forEach(([event, value]) => instance.off(event, value))
-      scope._offs.clear()
-      unhook()
-      revoke()
-    },
-  ] as [Instance, () => void] & {
-    _offs: Set<[string, Listener | ReturnType<Instance['emit']>]>
+
+  const clear = () => {
+    _offs.forEach(([event, value]) => instance.off(event, value))
+    _offs.clear()
   }
-  Object.defineProperty(scope, '_offs', {
-    value: new Set<[string, Listener | ReturnType<Instance['emit']>]>(),
-  })
+  const destroy = () => {
+    clear()
+    unhook()
+    revoke()
+  }
+
   const unhook = instance.hook.all((result) => {
     if (result.type === 'off' && result.position === 'after') {
-      scope._offs.forEach((off) => {
-        result.payload[0] === off[0] && result.payload[1] === off[1] && scope._offs.delete(off)
+      _offs.forEach((off) => {
+        result.payload[0] === off[0] && result.payload[1] === off[1] && _offs.delete(off)
       })
     }
   })
-  return scope
+
+  return proxy as ProxyCtx
 }
 
 const randomString = (
@@ -290,23 +303,54 @@ export const useEvent =
     event = randomString(16)
   ) => {
     type Instance = typeof instance
+    type ProxyHookType = Exclude<keyof Instance['hook'], 'all'>
+    type ProxyHook<T extends ProxyHookType = ProxyHookType> = {
+      [K in T]: (listener: Parameters<Instance['hook'][K]>[1]) => ReturnType<Instance['hook'][K]>
+    }
+    type ProxyCtx = Omit<Instance, 'on' | 'once' | 'emit' | 'off' | 'size' | 'has' | 'hook'> & {
+      $event: typeof _event
+      $destroy: typeof revoke
+      on: (listener: (...args: P) => R[number]) => ReturnType<Instance['on']>
+      once: (listener: (...args: P) => R[number]) => ReturnType<Instance['once']>
+      emit: (...args: P) => EmitReturn<R>
+      off: (value: Parameters<Instance['off']>[1]) => ReturnType<Instance['off']>
+      size: (value: Parameters<Instance['size']>[1]) => ReturnType<Instance['size']>
+      has: (value: Parameters<Instance['has']>[1]) => ReturnType<Instance['has']>
+      hook: {
+        all: Instance['hook']['all']
+      } & ProxyHook
+    }
+
     const _event = base + event
-    return [
-      new Proxy(instance, {
-        get(target, key) {
-          if (key === 'on' || key === 'once') {
-            return (listener: Listener) => instance[key](_event, listener)
-          }
-          if (key === 'emit') {
-            return (...args: Parameters<Listener>) => instance.emit(_event, ...args)
-          }
-          return Reflect.get(target, key)
-        },
-      }) as unknown as Omit<Instance, 'on' | 'once' | 'emit'> & {
-        on: (listener: (...args: P) => R[number]) => ReturnType<Instance['on']>
-        once: (listener: (...args: P) => R[number]) => ReturnType<Instance['once']>
-        emit: (...args: P) => EmitReturn<R>
+    const keys = ['on', 'once', 'off', 'size', 'has'] as const
+    const hook: ProxyCtx['hook'] = {
+      all: instance.hook.all,
+      beforeOn: (listener) => instance.hook.beforeOn(_event, listener),
+      afterOn: (listener) => instance.hook.afterOn(_event, listener),
+      beforeEmit: (listener) => instance.hook.beforeEmit(_event, listener),
+      afterEmit: (listener) => instance.hook.afterEmit(_event, listener),
+      beforeOff: (listener) => instance.hook.beforeOff(_event, listener),
+      afterOff: (listener) => instance.hook.afterOff(_event, listener),
+    }
+    const { proxy, revoke } = Proxy.revocable(instance, {
+      get(target, key: keyof ProxyCtx) {
+        if (key === '$event') {
+          return _event
+        }
+        if (key === '$destroy') {
+          return revoke
+        }
+        if (key === 'emit') {
+          return (...args: Parameters<ProxyCtx['emit']>) => instance.emit(_event, ...args)
+        }
+        if (keys.includes(key as (typeof keys)[number])) {
+          return (value: any) => instance[key as (typeof keys)[number]](_event, value)
+        }
+        if (key === 'hook') {
+          return hook
+        }
+        return Reflect.get(target, key)
       },
-      _event,
-    ] as const
+    })
+    return proxy as unknown as ProxyCtx
   }
