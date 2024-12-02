@@ -10,438 +10,268 @@ English | [简体中文](./README.zh-CN.md)
 npm install async-event-channel
 ```
 
-## Quick Comprehension
+## Core concepts
 
-```javascript
-// event communication instance
-const dom = document.querySelector('.ctx');
+- `on` Register event
 
-// register event
-dom.addEventListener('click', function(event) {
-  console.log('event received');
-});
-// register event again
-dom.addEventListener('click', function(event) {
-  console.log('event received again');
-});
+- `emit` Trigger event
 
-// dispatch event
-dom.dispatchEvent(new Event('click'));
-// dispatch event again
-dom.dispatchEvent(new Event('click'));
+- `off` Remove event
+
+## Default communication
+
+> Synchronous, many-to-many communication
+
+- `on` can register multiple events with the same name
+
+- `emit` can trigger the same event multiple times; Synchronous trigger (will not wait for `on` registration)
+
+## Advanced
+
+> Add special characters to the event name to achieve more event communication methods
+
+- `on_ignore` The same event can only be registered once, and subsequent registrations will be ignored
+
+- The difference between `on_cover` and `on_ignore` is that ignoring becomes covering
+
+- `emit_wait` Make `emit` trigger asynchronously (wait for `on` registration)
+
+- `emit_ignore` The same event can only have one pending `emit`, and subsequent triggers will be ignored
+
+- The difference between `emit_cover` and `emit_ignore` is that ignoring becomes covering
+
+- `emit_ignore` or `emit_cover` will also make `emit` trigger asynchronously
+
+## Two-way communication
+
+- The return values of multiple registered `on` callback functions are combined into an array, which is used as the `resolve` parameter of the `Promise` return value of `emit` (microtask) and the parameter of the `onResolve` callback function (callback function)
+
+## Auxiliary methods
+
+- `useScope` Event communication scope: Record the cancellation method of the event through the proxy instance; Destroy the proxy instance and cancel all recorded events
+
+- `useEvent` Fixed event name: Generate a proxy instance with a fixed event name, which can directly use methods without passing the event name
+
+## Other methods
+
+- `once` `on` that listens only once
+
+- `size` Get the number of currently registered `on` or pending `emit`
+
+- `has` Determine whether the specified event name has been registered
+
+- `hook.all` Global hook: Register global hook functions, which can be executed
+
+- `hook.beforeOn` Hook function: Register the `on` hook function of the specified event name, which can be executed before `on`
+
+- `hook.beforeEmit` Hook function: Register the `emit` hook function of the specified event name, which can be executed before `emit`
+
+- `hook.beforeOff` Hook function: Register the `off` hook function of the specified event name, which can be executed before `off`
+
+- The difference between `hook.afterOn` and `hook.beforeOn` is that it is executed after `on`
+
+- The difference between `hook.afterEmit` and `hook.beforeEmit` is that it is executed after `emit`
+
+- The difference between `hook.afterOff` and `hook.beforeOff` is that it is executed after `off`
+
+## Example
+
+- Default communication
+
+```typescript
+import AsyncEventChannel from 'async-event-channel'
+const instance = new AsyncEventChannel()
+
+instance.on('click', (...args) => {
+  console.log('Received event', args)
+})
+
+instance.on('click', (...args) => {
+  console.log('Received event again', args)
+})
+
+instance.emit('click', 'click event', 'more parameters')
+
+// Print:
+// Received event [ 'click event', 'more parameters' ]
+// Received event again [ 'click event', 'more parameters' ]
 ```
 
-### Contrast
+- Bidirectional communication
 
-```javascript
-import AsyncEventChannel from 'async-event-channel';
-// or
-// const { default: AsyncEventChannel } = require('async-event-channel');
+```typescript
+instance.on('click', (a, b) => {
+  return a + b
+})
 
-// event communication instance
-const channel = new AsyncEventChannel();
+instance.on('click', (a, b) => {
+  return a - b
+})
 
-// register event
-channel.on('click', function(...args) {
-  console.log('event received', args);
-});
-// register event again
-channel.on('click', function(...args) {
-  console.log('event received again', args);
-});
+const result = instance.emit('click', 1, 1)
 
-// dispatch event
-channel.emit('click', 'event data1', 'event data2');
-// dispatch event again
-channel.emit('click', 'event data3', 'event data4');
+// Callback function
+result.onResolve((values) => {
+  console.log('onResolve', values)
+})
+
+// Promise
+result.then((values) => {
+  console.log('Promise', values)
+})
+
+// Print:
+// onResolve [ 2, 0 ]
+// Promise [ 2, 0 ]
 ```
 
-## Async Communication
+- Asynchronous communication
 
-```javascript
-import AsyncEventChannel from 'async-event-channel';
+```typescript
+const event = AsyncEventChannel.emit_wait + 'timeout'
 
-const channel = new AsyncEventChannel();
+instance.emit(event, 'asynchronous event').then(([data]) => {
+  console.log(data)
+})
 
-// Emit events first(Only when the event is not registered, will it wait asynchronously to send the event)
-channel.emit('timeout', 'timeout event');
+instance.on(event, (data) => {
+  console.log(data)
+  return 'return value'
+})
 
-// Register events later
-setTimeout(() => {
-  channel.on('timeout', function(data) {
-    console.log(data); // timeout event
-  });
-}, 1000);
+// Print:
+// asynchronous event
+// return value
 ```
 
-## Get event return value (two-way communication)
+- Event communication scope
 
-```javascript
-channel.on('get', function(data) {
-  console.log(data); // event data
-  return 'return value';
-});
+```typescript
+const scope = instance.useScope()
 
-const result = channel.emit('get', 'event data');
-console.log(result.values[0]); // return value
+instance.on('click', () => {
+  console.log('click-1')
+})
+
+scope.on('click', () => {
+  console.log('click-2')
+})
+
+instance.emit('click')
+
+// Print:
+// click-1
+// click-2
+
+// clear events on scope
+scope.$clear()
+instance.emit('click')
+
+// Print:
+// click-1
+
+// Destroy the proxy
+scope.$destroy()
+instance.emit // Error: The event has been destroyed
 ```
 
-## Get event return value asynchronously (two-way communication)
+- Fixed event name
 
-```javascript
-channel.asyncEmit('get', 'event data').promise.then(result => {
-  console.log(result[0]); // return value
-});
+```typescript
+const click = instance.useEvent()
 
-setTimeout(() => {
-  channel.on('get', function(data) {
-    console.log(data); // event data
-    return 'return value';
-  });
-}, 1000);
+click.on((data) => {
+  console.log(data)
+})
+
+click.emit('click event')
+
+// Print:
+// click event
 ```
 
-## Get event return value synchronously (two-way communication)
+- Generic return value of parameters
 
-```javascript
-channel.on('get', function(data) {
-  console.log(data); // event data
-  return 'return value';
-});
+```typescript
+instance.emit<[string]>('click').then((res) => {
+  type T = typeof res // [string]
+})
 
-// If the event is not registered, undefined will be obtained
-const values = channel.immedEmit('get', 'event data').values;
-console.log(values[0]); // return value
+const click = instance.useEvent<[number], [string]>()
+
+click.on((res) => {
+  type T = typeof res // number
+})
+
+type T = Parameters<typeof click.emit> // [number]
+
+click.emit(1).then((res) => {
+  type T = typeof res // [string]
+})
 ```
 
-## Cancel listening events
+- Listening only once
 
-```javascript
-const { cancel } = channel.on('cancel', function() {
-  return 'cancel event';
-});
+```typescript
+instance.once('click', () => {
+  console.log('Only listen once')
+})
 
-// Cancel listening events
-cancel();
+instance.emit('click')
+instance.emit('click')
 
-const values = channel.immedEmit('cancel').values;
-console.log(values); // []
+// Print:
+// Only listen once
 ```
 
-## Cancel the triggering event in waiting
+- Get the number of currently registered `on` or pending `emit`
 
-```javascript
-const { cancel } = channel.emit('cancel', 'cancel event');
+```typescript
+instance.on('click', () => {})
+instance.on('click', () => {})
 
-// Cancel the triggering event in waiting
-cancel();
+console.log(instance.size('click', 'on')) // 2
 
-// Unable to receive events
-channel.on('cancel', function(data) {
-  console.log(data);
-});
+instance.emit(AsyncEventChannel.emit_ignore + 'click')
+instance.emit(AsyncEventChannel.emit_ignore + 'click')
+
+// Because emit_ignore will ignore the same event triggered repeatedly, there is only one pending emit
+console.log(instance.size('click', 'emit')) // 1
 ```
 
-## Cancel listening events and triggering events on the specified channel
+- Determine whether the specified event name has been registered
 
-```javascript
-channel.on('cancel', function() {
-  return 'cancel event';
-});
-channel.on('cancel', function() {
-  return 'cancel event again';
-});
+```typescript
+instance.on('click', () => {})
 
-channel.off('cancel');
+const listener = () => {}
+instance.on('click', listener)
 
-const values = channel.immedEmit('cancel').values;
-console.log(values); // []
+console.log(instance.has('click', 'on')) // true
+
+console.log(instance.has('click', listener)) // true
 ```
 
-## Listening process
+- Global hook
 
-```javascript
-let result = null;
+```typescript
+instance.hook.all((result) => {
+  console.log(result)
+})
 
-// Listening process, from registering events to triggering events and canceling events, only listening events, not triggering events
-channel.watch('watch', function(data) {
-  // Note: The execution order of the listening process cannot be guaranteed
-  console.log(data); // { "id": "1:1", "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
-  result = data;
-});
+instance.emit('click', 1, 2)
 
-const { id } = channel.on('watch', function() {
-  return 'watch event';
-});
-
-console.log(result?.id === id); // true
+// Print:
+// { type: 'emit', position: 'before', payload: [ 'click', 1, 2 ] }
+// { type: 'emit', position: 'after', payload: [ 'click', 1, 2 ], result: Promise }
 ```
 
-## Query whether it still exists
+- Hook function
 
-```javascript
-const { id } = channel.on('exists', function() {});
+```typescript
+instance.hook.beforeOn('click', (result) => {
+  console.log(result)
+})
 
-console.log(channel.hasId(id)); // true
-console.log(channel.hasType('exists').has); // true
-```
-
-## Import and export
-
-```javascript
-const channel_old = new AsyncEventChannel();
-const channel_new = new AsyncEventChannel();
-
-channel_old.on('import', function() {
-  return 'import event';
-});
-
-// Export event channel data
-const data = channel_old.export();
-
-// Import event channel data
-channel_new.import(...data);
-
-// Equivalent to copy, does not affect the original event channel data
-const values_new = channel_new.immedEmit('import').values;
-console.log(values_new[0]); // import event
-
-// Equivalent to copy, does not affect the original event channel data
-const values_old = channel_old.immedEmit('import').values;
-console.log(values_old[0]); // import event
-```
-
-## Listening events and microtasks
-
-```javascript
-let current = 0;
-
-channel.on('microtask', function() {
-  // Like Promise.resolve().then(), the callback function is executed in the microtask queue of the current event loop
-  console.log('execute time', current); // 1
-});
-
-// Trigger events immediately
-channel.emit('microtask');
-
-current = 1;
-```
-
-## Listen to events only once (two-way communication)
-
-```javascript
-channel.once('once', function() {
-  return 'once event';
-});
-
-const values = channel.immedEmit('once').values;
-console.log(values[0]); // once event
-
-const valuesAgain = channel.immedEmit('once').values;
-console.log(valuesAgain); // []
-```
-
-## Listen to events once immediately (two-way communication)
-
-```javascript
-// Never trigger events
-channel.immedOnce('immedOnce', function() {
-  console.log('before');
-});
-
-channel.emit('immedOnce');
-
-channel.immedOnce('immedOnce', function() {
-  console.log('after'); // after
-});
-```
-
-## Unified collection of cancel events
-
-```javascript
-import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const { ctx, cancel } = asyncEventChannelScope(channel);
-
-ctx.on('cancel', function() {
-  return 'cancel event';
-});
-ctx.once('cancel-again', function() {
-  return 'cancel event again';
-});
-
-// Cancel all events
-cancel();
-
-const values = ctx.immedEmit('cancel').values;
-console.log(values); // []
-
-const valuesAgain = channel.immedEmit('cancel-again').values;
-console.log(valuesAgain); // []
-```
-
-## Configure the event type list for scope isolation
-
-```javascript
-import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const { ctx } = asyncEventChannelScope(channel, {
-  include: [
-    {
-      type: 'only',
-      handlers: ['emit']
-    }
-  ]
-});
-
-ctx.emit('only', 'only trigger event');
-
-// Registering or canceling events will throw an error
-// ctx.on('only', function() {});
-// ctx.off('only');
-
-// Events can only be registered on the original event channel
-channel.on('only', function(res) {
-  console.log(res); // only trigger event
-});
-
-// Events outside the list are not affected
-ctx.on('other', function() {
-  return 'other event';
-});
-
-const values = ctx.immedEmit('other').values;
-console.log(values[0]); // other event
-```
-
-## Generate fixed event types
-
-```javascript
-import AsyncEventChannel, { useCreateEventChannel } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const createEventChannel = useCreateEventChannel(channel);
-
-const fixed = createEventChannel();
-
-fixed.on(function() {
-  return 'fixed event';
-});
-
-const values = fixed.immedEmit().values;
-console.log(values[0]); // fixed event
-```
-
-## Disable asynchronous triggering events
-
-```javascript
-const channel = new AsyncEventChannel({ isEmitCache: false });
-
-channel.emit('disable', 'disable event');
-
-// Unable to receive events
-channel.on('disable', function(data) {
-  console.log(data);
-});
-```
-
-## The same channel can only register one event
-
-```javascript
-const channel = new AsyncEventChannel({ isOnOnce: true });
-
-channel.on('once', function() {
-  return 'once event';
-});
-
-// Overwrite the previous event
-channel.on('once', function() {
-  return 'once event again';
-});
-
-const values = channel.immedEmit('once').values;
-console.log(values[0]); // once event again
-```
-
-## The same channel can only trigger one event
-
-```javascript
-const channel = new AsyncEventChannel({ isEmitOnce: true });
-
-channel.emit('once', 'once event');
-
-// Overwrite the previous waiting event
-channel.emit('once', 'once event again');
-
-// Only the last event can be received
-channel.on('once', function(data) {
-  console.log(data); // once event again
-});
-```
-
-## Only set the specified event type
-
-```javascript
-const options = new Map();
-options.set('only', { isEmitCache: false });
-const channel = new AsyncEventChannel(null, options);
-
-channel.emit('only', 'only event');
-
-// Unable to receive events
-setTimeout(() => {
-  channel.on('only', function(data) {
-    console.log(data);
-  });
-}, 1000);
-
-channel.emit('other', 'other event');
-
-// Can receive events
-setTimeout(() => {
-  channel.on('other', function(data) {
-    console.log(data); // other event
-  });
-}, 1000);
-```
-
-## Modify global default configuration
-
-```javascript
-import AsyncEventChannel from 'async-event-channel';
-
-AsyncEventChannel.defaultOptions.isEmitCache = false;
-```
-
-## Priority of configuration items
-
-```javascript
-// specify
-new AsyncEventChannel(null, new Map([ ['only', { isEmitCache: true }] ]))
-
-// current
-new AsyncEventChannel({ isEmitCache: true })
-
-// global
-AsyncEventChannel.defaultOptions.isEmitCache
-
-// specify > current > global
-```
-
-## Values that can be used as event types
-
-> Any type of value can be used, including strings, numbers, objects, arrays, symbols, null, etc.
-
-```javascript
-const channel = new AsyncEventChannel();
-
-channel.on('string', function() {});
-channel.on(1, function() {});
-channel.on({}, function() {});
-channel.on([], function() {});
-channel.on(Symbol('symbol'), function() {});
-channel.on(null, function() {});
-channel.on(function() {}, function() {});
+// Same as (global hook) example...
 ```

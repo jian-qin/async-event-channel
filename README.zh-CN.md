@@ -10,438 +10,268 @@
 npm install async-event-channel
 ```
 
-## 快速理解
+## 核心概念
 
-```javascript
-// 事件通信实例
-const dom = document.querySelector('.ctx');
+- `on` 注册事件
 
-// 注册事件
-dom.addEventListener('click', function(event) {
-  console.log('收到的事件');
-});
-// 再次注册事件
-dom.addEventListener('click', function(event) {
-  console.log('再次收到事件');
-});
+- `emit` 触发事件
 
-// 触发事件
-dom.dispatchEvent(new Event('click'));
-// 再次触发事件
-dom.dispatchEvent(new Event('click'));
+- `off` 移除事件
+
+## 默认通信
+
+> 同步，多对多通信
+
+- `on` 可以注册多个同名事件
+
+- `emit` 可以多次触发同名事件；同步触发（不会等待 `on` 的注册）
+
+## 进阶
+
+> 事件名称中添加特殊字符，实现更多的事件通信方式
+
+- `on_ignore` 同名事件只能注册一次，再次注册会被忽略
+
+- `on_cover` 和 `on_ignore` 的区别是忽略变为覆盖
+
+- `emit_wait` 让 `emit` 变为异步触发（会等待 `on` 的注册）
+
+- `emit_ignore` 同名事件只能存在一个等待中的 `emit`，再次触发会被忽略
+
+- `emit_cover` 和 `emit_ignore` 的区别是忽略变为覆盖
+
+- `emit_ignore` 或 `emit_cover` 也会让 `emit` 变为异步触发
+
+## 双向通信
+
+- 注册的多个 `on` 的回调函数的返回值组成一个数组，作为 `emit` 的返回值 `Promise` 的 `resolve` 参数（微队列）和 `onResolve` 回调函数参数（回调函数）
+
+## 辅助方法
+
+- `useScope` 事件通信的作用域：通过代理实例记录事件的取消方法；销毁代理实例，取消记录的所有事件
+
+- `useEvent` 固定事件名称：生成固定了事件名称的代理实例，可以直接使用方法不用传事件名称
+
+## 其他方法
+
+- `once` 只监听一次的 `on`
+
+- `size` 获取当前注册的 `on` 或 等待的 `emit` 的数量
+
+- `has` 判断事件名称对应的 注册的 `on`，或 等待的 `emit` 是否存在
+
+- `hook.all` 全局钩子：注册全局钩子函数，可以在 `on`、`emit`、`off` 的时候执行
+
+- `hook.beforeOn` 钩子函数：注册指定事件名称的 `on` 钩子函数，可以在 `on` 之前执行
+
+- `hook.beforeEmit` 钩子函数：注册指定事件名称的 `emit` 钩子函数，可以在 `emit` 之前执行
+
+- `hook.beforeOff` 钩子函数：注册指定事件名称的 `off` 钩子函数，可以在 `off` 之前执行
+
+- `hook.afterOn` 和 `hook.beforeOn` 的区别是在 `on` 之后执行
+
+- `hook.afterEmit` 和 `hook.beforeEmit` 的区别是在 `emit` 之后执行
+
+- `hook.afterOff` 和 `hook.beforeOff` 的区别是在 `off` 之后执行
+
+## 示例
+
+- 默认通信
+
+```typescript
+import AsyncEventChannel from 'async-event-channel'
+const instance = new AsyncEventChannel()
+
+instance.on('click', (...args) => {
+  console.log('收到的事件', args)
+})
+
+instance.on('click', (...args) => {
+  console.log('再次收到事件', args)
+})
+
+instance.emit('click', '点击事件', '更多参数')
+
+// 打印：
+// 收到的事件 [ '点击事件', '更多参数' ]
+// 再次收到事件 [ '点击事件', '更多参数' ]
 ```
 
-### 对比
+- 双向通信
 
-```javascript
-import AsyncEventChannel from 'async-event-channel';
-// 或
-// const { default: AsyncEventChannel } = require('async-event-channel');
+```typescript
+instance.on('click', (a, b) => {
+  return a + b
+})
 
-// 事件通信实例
-const channel = new AsyncEventChannel();
+instance.on('click', (a, b) => {
+  return a - b
+})
 
-// 注册事件
-channel.on('click', function(...args) {
-  console.log('收到的事件', args);
-});
-// 再次注册事件
-channel.on('click', function(...args) {
-  console.log('再次收到事件', args);
-});
+const result = instance.emit('click', 1, 1)
 
-// 触发事件
-channel.emit('click', '事件数据1', '事件数据2');
-// 再次触发事件
-channel.emit('click', '事件数据3', '事件数据4');
+// 回调函数
+result.onResolve((values) => {
+  console.log('onResolve', values)
+})
+
+// 微队列
+result.then((values) => {
+  console.log('Promise', values)
+})
+
+// 打印：
+// onResolve [ 2, 0 ]
+// Promise [ 2, 0 ]
 ```
 
-## 异步通信
+- 异步通信
 
-```javascript
-import AsyncEventChannel from 'async-event-channel';
+```typescript
+const event = AsyncEventChannel.emit_wait + 'timeout'
 
-const channel = new AsyncEventChannel();
+instance.emit(event, '异步事件').then(([data]) => {
+  console.log(data)
+})
 
-// 首先发出事件 (仅当事件未注册时，才会异步等待发送事件)
-channel.emit('timeout', '异步事件');
+instance.on(event, (data) => {
+  console.log(data)
+  return '返回值'
+})
 
-// 稍后注册事件
-setTimeout(() => {
-  channel.on('timeout', function(data) {
-    console.log(data); // 异步事件
-  });
-}, 1000);
+// 打印：
+// 异步事件
+// 返回值
 ```
 
-## 获取事件返回值（双向通信）
+- 事件通信的作用域
 
-```javascript
-channel.on('get', function(data) {
-  console.log(data); // 事件数据
-  return '返回值';
-});
+```typescript
+const scope = instance.useScope()
 
-const result = channel.emit('get', '事件数据');
-console.log(result.values[0]); // 返回值
+instance.on('click', () => {
+  console.log('click-1')
+})
+
+scope.on('click', () => {
+  console.log('click-2')
+})
+
+instance.emit('click')
+
+// 打印：
+// click-1
+// click-2
+
+// 清空作用域上的事件
+scope.$clear()
+instance.emit('click')
+
+// 打印：
+// click-1
+
+// 销毁代理
+scope.$destroy()
+instance.emit // Error: The event has been destroyed
 ```
 
-## 异步获取事件返回值（双向通信）
+- 固定事件名称
 
-```javascript
-channel.asyncEmit('get', '事件数据').promise.then(result => {
-  console.log(result[0]); // 返回值
-});
+```typescript
+const click = instance.useEvent()
 
-setTimeout(() => {
-  channel.on('get', function(data) {
-    console.log(data); // 事件数据
-    return '返回值';
-  });
-}, 1000);
+click.on((data) => {
+  console.log(data)
+})
+
+click.emit('点击事件')
+
+// 打印：
+// 点击事件
 ```
 
-## 同步获取事件返回值（双向通信）
+- 参数返回值的泛型
 
-```javascript
-channel.on('get', function(data) {
-  console.log(data); // 事件数据
-  return '返回值';
-});
+```typescript
+instance.emit<[string]>('click').then((res) => {
+  type T = typeof res // [string]
+})
 
-// 如果未注册事件，将获得 undefined
-const values = channel.immedEmit('get', '事件数据').values;
-console.log(values[0]); // 返回值
+const click = instance.useEvent<[number], [string]>()
+
+click.on((res) => {
+  type T = typeof res // number
+})
+
+type T = Parameters<typeof click.emit> // [number]
+
+click.emit(1).then((res) => {
+  type T = typeof res // [string]
+})
 ```
 
-## 取消侦听事件
+- 只监听一次
 
-```javascript
-const { cancel } = channel.on('cancel', function() {
-  return '取消事件';
-});
+```typescript
+instance.once('click', () => {
+  console.log('只监听一次')
+})
 
-// 取消侦听事件
-cancel();
+instance.emit('click')
+instance.emit('click')
 
-const values = channel.immedEmit('cancel').values;
-console.log(values); // []
+// 打印：
+// 只监听一次
 ```
 
-## 取消等待中的触发事件
+- 获取当前注册或等待的事件数量
 
-```javascript
-const { cancel } = channel.emit('cancel', '取消事件');
+```typescript
+instance.on('click', () => {})
+instance.on('click', () => {})
 
-// 取消等待中的触发事件
-cancel();
+console.log(instance.size('click', 'on')) // 2
 
-// 无法接收事件
-channel.on('cancel', function(data) {
-  console.log(data);
-});
+instance.emit(AsyncEventChannel.emit_ignore + 'click')
+instance.emit(AsyncEventChannel.emit_ignore + 'click')
+
+// 因为 emit_ignore 会忽略重复触发的同名事件，所以只有一个等待中的 emit
+console.log(instance.size('click', 'emit')) // 1
 ```
 
-## 取消指定通道上的监听事件和触发事件
+- 判断事件名称对应的注册或等待的事件是否存在
 
-```javascript
-channel.on('cancel', function() {
-  return '取消事件';
-});
-channel.on('cancel', function() {
-  return '再次取消事件';
-});
+```typescript
+instance.on('click', () => {})
 
-channel.off('cancel');
+const listener = () => {}
+instance.on('click', listener)
 
-const values = channel.immedEmit('cancel').values;
-console.log(values); // []
+console.log(instance.has('click', 'on')) // true
+
+console.log(instance.has('click', listener)) // true
 ```
 
-## 监听过程
+- 全局钩子
 
-```javascript
-let result = null;
+```typescript
+instance.hook.all((result) => {
+  console.log(result)
+})
 
-// 监听过程，从注册事件到触发事件和取消事件，只监听事件，不触发事件
-channel.watch('watch', function(data) {
-  // 注意：无法保证监听过程的执行顺序
-  console.log(data); // { "id": "1:1", "event": "on", "progress": "register", "type": "watch", "value": function() {...} }
-  result = data;
-});
+instance.emit('click', 1, 2)
 
-const { id } = channel.on('watch', function() {
-  return '监听过程';
-});
-
-console.log(result?.id === id); // true
+// 打印：
+// { type: 'emit', position: 'before', payload: [ 'click', 1, 2 ] }
+// { type: 'emit', position: 'after', payload: [ 'click', 1, 2 ], result: Promise }
 ```
 
-## 查询是否还存在
+- 钩子函数
 
-```javascript
-const { id } = channel.on('exists', function() {});
+```typescript
+instance.hook.beforeOn('click', (result) => {
+  console.log(result)
+})
 
-console.log(channel.hasId(id)); // true
-console.log(channel.hasType('exists').has); // true
-```
-
-## 导入导出
-
-```javascript
-const channel_old = new AsyncEventChannel();
-const channel_new = new AsyncEventChannel();
-
-channel_old.on('import', function() {
-  return '导入事件';
-});
-
-// 导出事件通道数据
-const data = channel_old.export();
-
-// 导入事件通道数据
-channel_new.import(...data);
-
-// 导入事件通道数据后，可以使用导入的事件通道数据
-const values_new = channel_new.immedEmit('import').values;
-console.log(values_new[0]); // 导入事件
-
-// 相当于复制，不会影响原事件通道数据
-const values_old = channel_old.immedEmit('import').values;
-console.log(values_old[0]); // 导入事件
-```
-
-## 监听事件和微任务
-
-```javascript
-let current = 0;
-
-channel.on('microtask', function() {
-  // 和Promise.resolve().then()一样，回调函数在当前事件循环的微任务队列中执行
-  console.log('执行时刻', current); // 1
-});
-
-// 立刻触发事件
-channel.emit('microtask');
-
-current = 1;
-```
-
-## 只监听一次事件（双向通信）
-
-```javascript
-channel.once('once', function() {
-  return '一次事件';
-});
-
-const values = channel.immedEmit('once').values;
-console.log(values[0]); // 一次事件
-
-const valuesAgain = channel.immedEmit('once').values;
-console.log(valuesAgain); // []
-```
-
-## 立即监听事件一次（双向通信）
-
-```javascript
-// 永远不会触发事件
-channel.immedOnce('immedOnce', function() {
-  console.log('之前');
-});
-
-channel.emit('immedOnce');
-
-channel.immedOnce('immedOnce', function() {
-  console.log('之后'); // 之后
-});
-```
-
-## 取消事件的统一收集
-
-```javascript
-import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const { ctx, cancel } = asyncEventChannelScope(channel);
-
-ctx.on('cancel', function() {
-  return '取消事件';
-});
-ctx.on('cancel-again', function () {
-  return '再次取消事件'
-});
-
-// 取消所有事件
-cancel();
-
-const values = ctx.immedEmit('cancel').values;
-console.log(values); // []
-
-const valuesAgain = channel.immedEmit('cancel-again').values;
-console.log(valuesAgain); // []
-```
-
-## 配置事件类型名单进行作用域隔离
-
-```javascript
-import AsyncEventChannel, { asyncEventChannelScope } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const { ctx } = asyncEventChannelScope(channel, {
-  include: [
-    {
-      type: 'only',
-      handlers: ['emit']
-    }
-  ]
-});
-
-ctx.emit('only', '仅支持触发事件');
-
-// 注册或取消事件会报错
-// ctx.on('only', function() {});
-// ctx.off('only');
-
-// 只能在原事件通道上注册事件
-channel.on('only', function(res) {
-  console.log(res); // 仅支持触发事件
-});
-
-// 名单外的事件类型不受影响
-ctx.on('other', function() {
-  return '其他事件';
-});
-
-const values = ctx.immedEmit('other').values;
-console.log(values[0]); // 其他事件
-```
-
-## 生成固定的事件类型
-
-```javascript
-import AsyncEventChannel, { useCreateEventChannel } from 'async-event-channel';
-
-const channel = new AsyncEventChannel();
-const createEventChannel = useCreateEventChannel(channel);
-
-const fixed = createEventChannel();
-
-fixed.on(function() {
-  return '固定事件';
-});
-
-const values = fixed.immedEmit().values;
-console.log(values[0]); // 固定事件
-```
-
-## 设置禁用异步触发事件
-
-```javascript
-const channel = new AsyncEventChannel({ isEmitCache: false });
-
-channel.emit('disable', '禁用事件');
-
-// 无法接收事件
-channel.on('disable', function(data) {
-  console.log(data);
-});
-```
-
-## 设置同一通道只能注册一个事件
-
-```javascript
-const channel = new AsyncEventChannel({ isOnOnce: true });
-
-channel.on('once', function() {
-  return '一次事件';
-});
-
-// 覆盖上一个事件
-channel.on('once', function() {
-  return '第二次一次事件';
-});
-
-const values = channel.immedEmit('once').values;
-console.log(values[0]); // 第二次一次事件
-```
-
-## 设置同一通道只能触发一个事件
-
-```javascript
-const channel = new AsyncEventChannel({ isEmitOnce: true });
-
-channel.emit('once', '一次事件');
-
-// 覆盖上一个等待事件
-channel.emit('once', '第二次一次事件');
-
-// 只能接收最后一个事件
-channel.on('once', function(data) {
-  console.log(data); // 第二次一次事件
-});
-```
-
-## 仅设置指定的事件类型
-
-```javascript
-const options = new Map();
-options.set('only', { isEmitCache: false });
-const channel = new AsyncEventChannel(null, options);
-
-channel.emit('only', '指定事件');
-
-// 无法接收事件
-setTimeout(() => {
-  channel.on('only', function(data) {
-    console.log(data);
-  });
-}, 1000);
-
-channel.emit('other', '其他事件');
-
-// 可以接收事件
-setTimeout(() => {
-  channel.on('other', function(data) {
-    console.log(data); // 其他事件
-  });
-}, 1000);
-```
-
-## 修改全局默认配置
-
-```javascript
-import AsyncEventChannel from 'async-event-channel';
-
-AsyncEventChannel.defaultOptions.isEmitCache = false;
-```
-
-## 配置项的优先级
-
-```javascript
-// 指定
-new AsyncEventChannel(null, new Map([ ['only', { isEmitCache: true }] ]))
-
-// 当前
-new AsyncEventChannel({ isEmitCache: true })
-
-// 全局
-AsyncEventChannel.defaultOptions.isEmitCache
-
-// 指定 > 当前 > 全局
-```
-
-## 可用作事件类型的值
-
-> 可以使用任何类型的值，包括字符串，数字，对象，数组，符号，null等
-
-```javascript
-const channel = new AsyncEventChannel();
-
-channel.on('string', function() {});
-channel.on(1, function() {});
-channel.on({}, function() {});
-channel.on([], function() {});
-channel.on(Symbol('symbol'), function() {});
-channel.on(null, function() {});
-channel.on(function() {}, function() {});
+// 同（全局钩子）示例一样...
 ```
