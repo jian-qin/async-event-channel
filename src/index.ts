@@ -24,12 +24,14 @@ type EmitReturn<R extends ListenerReturns> = Promise<R> & {
   cancel?: () => void
 }
 
+type Listener_or_emitReturn = Listener | ReturnType<Base['emit']>
+
 class Base {
-  static on_ignore = '@o_i;'
-  static on_cover = '@o_c;'
-  static emit_wait = '@e_w;'
-  static emit_ignore = '@e_i;'
-  static emit_cover = '@e_c;'
+  static readonly on_ignore = '@o_i;'
+  static readonly on_cover = '@o_c;'
+  static readonly emit_wait = '@e_w;'
+  static readonly emit_ignore = '@e_i;'
+  static readonly emit_cover = '@e_c;'
 
   protected _events = new Map<string, Set<Listener>>()
   protected _emits = new Map<string, Set<ReturnType<EventChannel['emit']>>>()
@@ -123,7 +125,7 @@ class Base {
     return result
   }
 
-  off(event: string, value: Listener | ReturnType<EventChannel['emit']> | 'all' | 'on' | 'emit') {
+  off(event: string, value: Listener_or_emitReturn | 'all' | 'on' | 'emit') {
     if (value === 'all') {
       this._events.delete(event)
       this._emits.get(event)?.forEach(({ cancel }) => cancel?.())
@@ -144,13 +146,17 @@ class Base {
   }
 
   protected _createHook =
-    (type: HookType, position: HookPosition) => (event: string, listener: Hook) =>
-      this.hook.all((result) => {
+    (type: HookType, position: HookPosition) => (event: string, listener: Hook) => {
+      assert.event(event)
+      assert.listener(listener)
+
+      return this.hook.all((result) => {
         result.type === type &&
           result.position === position &&
           result.payload[0] === event &&
           listener(result)
       })
+    }
 
   hook = {
     all: (callBack: Hook) => {
@@ -172,6 +178,9 @@ export default class EventChannel extends Base {
   }
 
   on: Base['on'] = (event, listener) => {
+    assert.event(event)
+    assert.listener(listener)
+
     this._hooks.forEach((hook) =>
       hook({ type: 'on', position: 'before', payload: [event, listener] })
     )
@@ -186,6 +195,8 @@ export default class EventChannel extends Base {
     event: Parameters<Base['emit']>[0],
     ...args: Parameters<Base['emit']>[1]
   ) => {
+    assert.event(event)
+
     this._hooks.forEach((hook) =>
       hook({ type: 'emit', position: 'before', payload: [event, ...args] })
     )
@@ -196,17 +207,21 @@ export default class EventChannel extends Base {
     return result
   }
 
-  off: Base['off'] = (event, listener) => {
+  off: Base['off'] = (event, value) => {
+    assert.event(event)
+    assert.off_value(value)
+
     this._hooks.forEach((hook) =>
-      hook({ type: 'off', position: 'before', payload: [event, listener] })
+      hook({ type: 'off', position: 'before', payload: [event, value] })
     )
-    super.off(event, listener)
-    this._hooks.forEach((hook) =>
-      hook({ type: 'off', position: 'after', payload: [event, listener] })
-    )
+    super.off(event, value)
+    this._hooks.forEach((hook) => hook({ type: 'off', position: 'after', payload: [event, value] }))
   }
 
   once: Base['on'] = (event, listener) => {
+    assert.event(event)
+    assert.listener(listener)
+
     const _listener = (...args: Parameters<Listener>) => {
       listener(...args)
       this.off(event, _listener)
@@ -214,10 +229,17 @@ export default class EventChannel extends Base {
     return this.on(event, _listener)
   }
 
-  size = (event: string, value: 'on' | 'emit') =>
-    this[value === 'on' ? '_events' : '_emits'].get(event)?.size || 0
+  size = (event: string, value: 'on' | 'emit') => {
+    assert.event(event)
+    assert.size_value(value)
 
-  has = (event: string, value: Listener | ReturnType<EventChannel['emit']> | 'on' | 'emit') => {
+    return this[value === 'on' ? '_events' : '_emits'].get(event)?.size || 0
+  }
+
+  has = (event: string, value: Listener_or_emitReturn | 'on' | 'emit') => {
+    assert.event(event)
+    assert.has_value(value)
+
     if (value === 'on') {
       return this._events.has(event)
     }
@@ -256,15 +278,14 @@ const useScope = (instance: EventChannel) => {
         return destroy
       }
       if (key === 'on' || key === 'once') {
-        const proxy: Instance['on'] = (event, listener) => {
+        return (event: Parameters<Instance['on']>[0], listener: Parameters<Instance['on']>[1]) => {
           const result = instance[key](event, listener)
           result && _offs.add([event, listener])
           return result
         }
-        return proxy
       }
       if (key === 'emit') {
-        const proxy = (
+        return (
           event: Parameters<Instance['emit']>[0],
           ...args: Parameters<Instance['emit']>[1]
         ) => {
@@ -272,7 +293,6 @@ const useScope = (instance: EventChannel) => {
           result.cancel && _offs.add([event, result])
           return result
         }
-        return proxy
       }
       return Reflect.get(target, key)
     },
@@ -359,3 +379,40 @@ const useEvent =
     })
     return proxy as unknown as ProxyCtx
   }
+
+const assert: {
+  listener_or_emitReturn: (value: unknown) => boolean
+  event: (event: unknown) => asserts event is Parameters<EventChannel['on']>[0]
+  listener: (listener: unknown) => asserts listener is Parameters<EventChannel['on']>[1]
+  off_value: (value: unknown) => asserts value is Parameters<EventChannel['off']>[1]
+  size_value: (value: unknown) => asserts value is Parameters<EventChannel['size']>[1]
+  has_value: (value: unknown) => asserts value is Parameters<EventChannel['has']>[1]
+} = {
+  listener_or_emitReturn: (value) => {
+    if (typeof value === 'function') return true
+    return (
+      typeof value === 'object' &&
+      typeof (value as ReturnType<EventChannel['emit']>).then === 'function' &&
+      typeof (value as ReturnType<EventChannel['emit']>).onResolve === 'function'
+    )
+  },
+  event: (event) => {
+    if (typeof event !== 'string') throw Error('event must be a string')
+  },
+  listener: (listener) => {
+    if (typeof listener !== 'function') throw Error('listener must be a function')
+  },
+  off_value: (value) => {
+    if (value === 'all' || value === 'on' || value === 'emit') return
+    if (assert.listener_or_emitReturn(value)) return
+    throw Error('value must be "all" | "on" | "emit" | function | emit return value')
+  },
+  size_value: (value) => {
+    if (value !== 'on' && value !== 'emit') throw Error('value must be "on" | "emit"')
+  },
+  has_value: (value) => {
+    if (value === 'on' || value === 'emit') return
+    if (assert.listener_or_emitReturn(value)) return
+    throw Error('value must be "on" | "emit" | function | emit return value')
+  },
+}
