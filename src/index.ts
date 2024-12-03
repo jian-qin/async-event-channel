@@ -3,22 +3,15 @@ type ListenerReturns = ReturnType<Listener>[]
 
 type HookType = 'on' | 'emit' | 'off'
 type HookPosition = 'before' | 'after'
-type BaseHookResult<T extends HookType> =
-  | {
-      type: T
-      position: 'before'
-      payload: Parameters<Base[T]>
-    }
-  | ({
-      type: T
-      position: 'after'
-      payload: Parameters<Base[T]>
-    } & {
-      [K in T extends 'on' | 'emit' ? 'result' : never]: ReturnType<Base[T]>
-    })
-type Hook = <T extends HookType>(result: BaseHookResult<T>) => void
+export type HookResult<T extends HookType = HookType> = {
+  type: T
+  position: 'before' | 'after'
+  payload: Parameters<Base[T]>
+  result?: ReturnType<Base[T]>
+}
+type Hook = <T extends HookType>(result: HookResult<T>) => void
 
-type EmitReturn<R extends ListenerReturns> = Promise<R> & {
+export type EmitReturn<R extends ListenerReturns = ListenerReturns> = Promise<R> & {
   onResolve: (cb: (value: R) => void) => void
   onReject?: (cb: (reason: 'not registered' | 'ignore' | 'cancel') => void) => void
   cancel?: () => void
