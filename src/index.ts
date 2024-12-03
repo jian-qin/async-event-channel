@@ -20,7 +20,7 @@ type Hook = <T extends HookType>(result: BaseHookResult<T>) => void
 
 type EmitReturn<R extends ListenerReturns> = Promise<R> & {
   onResolve: (cb: (value: R) => void) => void
-  onReject?: (cb: (reason: 'cancel') => void) => void
+  onReject?: (cb: (reason: 'not registered' | 'ignore' | 'cancel') => void) => void
   cancel?: () => void
 }
 
@@ -37,26 +37,19 @@ class Base {
   protected _emits = new Map<string, Set<ReturnType<EventChannel['emit']>>>()
   protected _hooks = new Set<Hook>()
 
-  protected _events_item(event: string) {
-    let item = this._events.get(event)
-    item || this._events.set(event, (item = new Set()))
-    return item
-  }
-  protected _emits_item(event: string) {
-    let item = this._emits.get(event)
-    item || this._emits.set(event, (item = new Set()))
-    return item
-  }
-
   on(event: string, listener: Listener) {
-    const listeners = this._events_item(event)
-    if (event.includes(Base.on_ignore) && this._events.has(event)) {
-      return
+    if (this._events.has(event)) {
+      if (event.includes(Base.on_ignore)) {
+        return
+      }
+      if (event.includes(Base.on_cover)) {
+        this.off(event, 'on')
+        this._events.set(event, new Set())
+      }
+    } else {
+      this._events.set(event, new Set())
     }
-    if (event.includes(Base.on_cover)) {
-      listeners.clear()
-    }
-    listeners.add(listener)
+    this._events.get(event)!.add(listener)
     return () => this.off(event, listener)
   }
 
@@ -67,13 +60,11 @@ class Base {
     type Resolve = Parameters<EmitReturn<R>['onResolve']>[0]
     type Reject = Parameters<NonNullable<EmitReturn<R>['onReject']>>[0]
 
-    const syncResolve = (result: any = []): any =>
-      Object.defineProperty(Promise.resolve(result), 'onResolve', {
-        value: (cb: Resolve) => cb(result),
-      })
-
     if (this._events.has(event)) {
-      return syncResolve([...this._events.get(event)!].map((listener) => listener(...args)))
+      const _result: any = [...this._events.get(event)!].map((listener) => listener(...args))
+      return Object.defineProperty(Promise.resolve(_result), 'onResolve', {
+        value: (cb: Resolve) => cb(_result),
+      }) as any
     }
 
     const isWait =
@@ -81,46 +72,63 @@ class Base {
       event.includes(Base.emit_ignore) ||
       event.includes(Base.emit_cover)
     if (!isWait) {
-      return syncResolve()
+      return Object.defineProperty(Promise.reject('not registered'), 'onResolve', {
+        value: () => {},
+      }) as any
     }
 
-    if (this._emits.has(event)) {
-      if (event.includes(Base.emit_ignore)) {
-        return syncResolve()
-      }
-      if (event.includes(Base.emit_cover)) {
-        this.off(event, 'emit')
-      }
+    if (this._emits.has(event) && event.includes(Base.emit_ignore)) {
+      return Object.defineProperty(Promise.reject('ignore'), 'onResolve', {
+        value: () => {},
+      }) as any
     }
 
-    const resolves: Resolve[] = []
-    const rejects: Reject[] = []
+    this._emits.has(event) && event.includes(Base.emit_cover) && this.off(event, 'emit')
+
+    const resolves = new Set<Resolve>()
+    const rejects = new Set<Reject>()
+    let res = (cb: Resolve) => {
+      resolves.add(cb)
+    }
+    let rej = (cb: Reject) => {
+      rejects.add(cb)
+    }
     const result: any = new Promise((resolve, reject) => {
-      resolves.push(resolve)
-      rejects.push(reject)
+      resolves.add(resolve)
+      rejects.add(reject)
     })
 
     const unhook = this.hook.afterOn(event, ({ payload }) => {
-      end()
-      const _result = payload[1](...args)
+      const _result: any = [payload[1](...args)]
       resolves.forEach((resolve) => resolve(_result))
+      res = (cb: Resolve) => cb(_result)
+      rej = () => {}
+      end()
     })
 
     let cancel = () => {
-      end()
       rejects.forEach((reject) => reject('cancel'))
+      res = () => {}
+      rej = (cb: Reject) => cb('cancel')
+      end()
     }
+
     const end = () => {
       unhook()
       cancel = () => {}
+      resolves.clear()
+      rejects.clear()
       this.off(event, result)
     }
+
     Object.defineProperties(result, {
-      onResolve: { value: (cb: Resolve) => resolves.push(cb) },
-      onReject: { value: (cb: Reject) => rejects.push(cb) },
+      onResolve: { value: (cb: Resolve) => res(cb) },
+      onReject: { value: (cb: Reject) => rej(cb) },
       cancel: { value: () => cancel() },
     })
-    this._emits_item(event).add(result)
+    this._emits.has(event)
+      ? this._emits.get(event)!.add(result)
+      : this._emits.set(event, new Set([result]))
 
     return result
   }
