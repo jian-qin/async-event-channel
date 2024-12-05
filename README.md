@@ -44,7 +44,7 @@ npm install async-event-channel
 
 ## Two-way communication
 
-- The return values of multiple registered `on` callback functions are combined into an array, which is used as the `resolve` parameter of the `Promise` return value of `emit` (microtask) and the parameter of the `onResolve` callback function (callback function)
+- The return values of multiple registered `on` callback functions are combined into an array, which is used as the `resolve` parameter of the `Promise` return value of `emit` (microtask) and the parameter of the `onResolved` callback function (callback function)
 
 ## Auxiliary methods
 
@@ -111,8 +111,8 @@ instance.on('click', (a, b) => {
 const result = instance.emit('click', 1, 1)
 
 // Callback function
-result.onResolve((values) => {
-  console.log('onResolve', values)
+result.onResolved((values) => {
+  console.log('onResolved', values)
 })
 
 // Promise
@@ -121,7 +121,7 @@ result.then((values) => {
 })
 
 // Print:
-// onResolve [ 2, 0 ]
+// onResolved [ 2, 0 ]
 // Promise [ 2, 0 ]
 ```
 

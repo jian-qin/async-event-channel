@@ -44,7 +44,7 @@ npm install async-event-channel
 
 ## 双向通信
 
-- 注册的多个 `on` 的回调函数的返回值组成一个数组，作为 `emit` 的返回值 `Promise` 的 `resolve` 参数（微队列）和 `onResolve` 回调函数参数（回调函数）
+- 注册的多个 `on` 的回调函数的返回值组成一个数组，作为 `emit` 的返回值 `Promise` 的 `resolve` 参数（微队列）和 `onResolved` 回调函数参数（回调函数）
 
 ## 辅助方法
 
@@ -111,8 +111,8 @@ instance.on('click', (a, b) => {
 const result = instance.emit('click', 1, 1)
 
 // 回调函数
-result.onResolve((values) => {
-  console.log('onResolve', values)
+result.onResolved((values) => {
+  console.log('onResolved', values)
 })
 
 // 微队列
@@ -121,7 +121,7 @@ result.then((values) => {
 })
 
 // 打印：
-// onResolve [ 2, 0 ]
+// onResolved [ 2, 0 ]
 // Promise [ 2, 0 ]
 ```
 

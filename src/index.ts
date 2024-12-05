@@ -11,11 +11,11 @@ export type HookResult<T extends HookType = HookType> = {
 }
 type Hook = <T extends HookType>(result: HookResult<T>) => void
 
-export type EmitReturn<R extends ListenerReturns = ListenerReturns> = Promise<R> & {
-  onResolve: (cb: (value: R) => void) => void
-  onReject?: (cb: (reason: 'not registered' | 'ignore' | 'cancel') => void) => void
-  cancel?: () => void
-}
+type EmitRejctReason = 'not registered' | 'ignore' | 'cancel'
+export type EmitReturn<R extends ListenerReturns = ListenerReturns> = UsePromiseResult<
+  R,
+  EmitRejctReason
+> & { readonly cancel?: () => void }
 
 type Listener_or_emitReturn = Listener | ReturnType<Base['emit']>
 
@@ -50,14 +50,10 @@ class Base {
     event: string,
     ...args: Parameters<Listener>
   ): EmitReturn<R> {
-    type Resolve = Parameters<EmitReturn<R>['onResolve']>[0]
-    type Reject = Parameters<NonNullable<EmitReturn<R>['onReject']>>[0]
+    const [promise, resolve, reject] = usePromise<R, EmitRejctReason>()
 
     if (this._events.has(event)) {
-      const _result: any = [...this._events.get(event)!].map((listener) => listener(...args))
-      return Object.defineProperty(Promise.resolve(_result), 'onResolve', {
-        value: (cb: Resolve) => cb(_result),
-      }) as any
+      return resolve([...this._events.get(event)!].map((listener) => listener(...args)) as R)
     }
 
     const isWait =
@@ -65,65 +61,32 @@ class Base {
       event.includes(Base.emit_ignore) ||
       event.includes(Base.emit_cover)
     if (!isWait) {
-      return Object.defineProperty(Promise.reject('not registered'), 'onResolve', {
-        value: () => {},
-      }) as any
+      return reject('not registered')
     }
-
     if (this._emits.has(event) && event.includes(Base.emit_ignore)) {
-      return Object.defineProperty(Promise.reject('ignore'), 'onResolve', {
-        value: () => {},
-      }) as any
+      return reject('ignore')
     }
 
-    this._emits.has(event) && event.includes(Base.emit_cover) && this.off(event, 'emit')
+    if (this._emits.has(event) && event.includes(Base.emit_cover)) {
+      this.off(event, 'emit')
+    }
 
-    const resolves = new Set<Resolve>()
-    const rejects = new Set<Reject>()
-    let res = (cb: Resolve) => {
-      resolves.add(cb)
-    }
-    let rej = (cb: Reject) => {
-      rejects.add(cb)
-    }
-    const result: any = new Promise((resolve, reject) => {
-      resolves.add(resolve)
-      rejects.add(reject)
+    Object.defineProperty(promise, 'cancel', {
+      value: () => {
+        reject('cancel')
+      },
     })
 
-    const unhook = this.hook.afterOn(event, ({ payload }) => {
-      const _result: any = [payload[1](...args)]
-      resolves.forEach((resolve) => resolve(_result))
-      res = (cb: Resolve) => cb(_result)
-      rej = () => {}
-      end()
-    })
+    promise.onFinally(
+      this.hook.afterOn(event, ({ payload }) => resolve([payload[1](...args)] as R))
+    )
 
-    let cancel = () => {
-      rejects.forEach((reject) => reject('cancel'))
-      res = () => {}
-      rej = (cb: Reject) => cb('cancel')
-      end()
-    }
-
-    const end = () => {
-      unhook()
-      cancel = () => {}
-      resolves.clear()
-      rejects.clear()
-      this.off(event, result)
-    }
-
-    Object.defineProperties(result, {
-      onResolve: { value: (cb: Resolve) => res(cb) },
-      onReject: { value: (cb: Reject) => rej(cb) },
-      cancel: { value: () => cancel() },
-    })
     this._emits.has(event)
-      ? this._emits.get(event)!.add(result)
-      : this._emits.set(event, new Set([result]))
+      ? this._emits.get(event)!.add(promise)
+      : this._emits.set(event, new Set([promise]))
+    promise.onFinally(() => this.off(event, promise))
 
-    return result
+    return promise
   }
 
   off(event: string, value: Listener_or_emitReturn | 'all' | 'on' | 'emit') {
@@ -320,11 +283,6 @@ const useScope = (instance: EventChannel) => {
   return proxy as ProxyCtx
 }
 
-const randomString = (
-  length: number,
-  chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-) => Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-
 const useEvent =
   (instance: EventChannel) =>
   <P extends Parameters<Listener>, R extends ListenerReturns = ListenerReturns>(base = '') => {
@@ -394,7 +352,9 @@ const assert: {
     return (
       typeof value === 'object' &&
       typeof (value as ReturnType<EventChannel['emit']>).then === 'function' &&
-      typeof (value as ReturnType<EventChannel['emit']>).onResolve === 'function'
+      typeof (value as ReturnType<EventChannel['emit']>).onResolved === 'function' &&
+      typeof (value as ReturnType<EventChannel['emit']>).onResolved === 'function' &&
+      typeof (value as ReturnType<EventChannel['emit']>).onFinally === 'function'
     )
   },
   event: (event) => {
@@ -416,4 +376,86 @@ const assert: {
     if (assert.listener_or_emitReturn(value)) return
     throw Error('value must be "on" | "emit" | function | emit return value')
   },
+}
+
+export const randomString = (
+  length: number,
+  chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+) => Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+
+export type UsePromiseResult<T = unknown, E = any> = Promise<T> & {
+  readonly onResolved: (cb: (value: T) => void) => void
+  readonly onRejected: (cb: (reason: E) => void) => void
+  readonly onFinally: (cb: () => void) => void
+}
+
+export const usePromise = <T = unknown, E = any>() => {
+  const resolves = new Set<(value: T) => void>()
+  const rejects = new Set<(reason: E) => void>()
+  const finallys = new Set<() => void>()
+  const result = {
+    state: 'pending' as 'pending' | 'resolved' | 'rejected',
+    value: null as T,
+    reason: null as E,
+  }
+
+  const promise = Object.defineProperties(
+    new Promise<T>((_resolve, _reject) => {
+      resolves.add(_resolve)
+      rejects.add(_reject)
+    }),
+    {
+      onResolved: {
+        value: (cb: Parameters<typeof resolves.add>[0]) => {
+          if (result.state === 'pending') {
+            resolves.add(cb)
+          } else if (result.state === 'resolved') {
+            cb(result.value)
+          }
+        },
+      },
+      onRejected: {
+        value: (cb: Parameters<typeof rejects.add>[0]) => {
+          if (result.state === 'pending') {
+            rejects.add(cb)
+          } else if (result.state === 'rejected') {
+            cb(result.reason)
+          }
+        },
+      },
+      onFinally: {
+        value: (cb: Parameters<typeof finallys.add>[0]) => {
+          if (result.state === 'pending') {
+            finallys.add(cb)
+          } else {
+            cb()
+          }
+        },
+      },
+    }
+  ) as UsePromiseResult<T, E>
+
+  const finallyd = () => {
+    finallys.forEach((cb) => cb())
+    resolves.clear()
+    rejects.clear()
+    finallys.clear()
+    return promise
+  }
+  const resolve = (value: T) => {
+    if (result.state !== 'pending') return promise
+    result.state = 'resolved'
+    result.value = value
+    resolves.forEach((cb) => cb(value))
+    return finallyd()
+  }
+  const reject = (reason: E) => {
+    if (result.state !== 'pending') return promise
+    result.state = 'rejected'
+    result.reason = reason
+    rejects.forEach((cb) => cb(reason))
+    return finallyd()
+  }
+
+  return [promise, resolve, reject] as const
 }

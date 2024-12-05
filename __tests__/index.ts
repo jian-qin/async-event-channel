@@ -74,8 +74,8 @@ test('双向通信', async () => {
     emit1.push(['Promise', values])
   })
 
-  result.onResolve((values) => {
-    emit1.push(['onResolve', values])
+  result.onResolved((values) => {
+    emit1.push(['onResolved', values])
   })
 
   await Promise.resolve()
@@ -83,7 +83,7 @@ test('双向通信', async () => {
   const eq1: (typeof emit1)[] = [
     emit1,
     [
-      ['onResolve', [2, 0]],
+      ['onResolved', [2, 0]],
       ['Promise', [2, 0]],
     ],
   ]
@@ -105,10 +105,10 @@ test('异步通信-多对多', async () => {
   })
 
   await Promise.resolve()
-  e1.onResolve((res) => {
+  e1.onResolved((res) => {
     emit1.push(res)
   })
-  e2.onResolve((res) => {
+  e2.onResolved((res) => {
     emit1.push(res)
   })
   await Promise.resolve()
@@ -122,6 +122,72 @@ test('异步通信-多对多', async () => {
   ]
   const eq2: (typeof emit1)[] = [emit1, [[1], [1]]]
   jsonEq(eq1, eq2)
+})
+
+test('异步通信-回调函数和微队列', async () => {
+  const instance = new AsyncEventChannel()
+  const emit1: number[][] = []
+  const emit2: string[] = []
+  const emit3: number[] = []
+  const event = AsyncEventChannel.emit_wait + 'click'
+
+  const e1 = instance.emit<number[]>(event)
+  e1.onResolved((res) => {
+    emit1.push(res)
+  })
+  e1.onRejected((err) => {
+    emit2.push(err)
+  })
+  e1.onFinally(() => {
+    emit3.push(3)
+  })
+
+  const e2 = instance.emit<number[]>(event)
+  e2.catch(() => {})
+  e2.onResolved((res) => {
+    emit1.push([...res, 4])
+  })
+  e2.onRejected((err) => {
+    emit2.push(err + '4')
+  })
+  e2.onFinally(() => {
+    emit3.push(4)
+  })
+  e2.cancel!()
+
+  instance.on(event, () => {
+    return 1
+  })
+
+  e1.cancel!()
+  await Promise.resolve()
+  e1.cancel!()
+  e1.cancel!()
+
+  e1.onResolved((res) => {
+    emit1.push(res)
+  })
+  e1.onRejected((err) => {
+    emit2.push(err)
+  })
+  e1.onFinally(() => {
+    emit3.push(3)
+  })
+
+  e2.onResolved((res) => {
+    emit1.push([...res, 4])
+  })
+  e2.onRejected((err) => {
+    emit2.push(err + '4')
+  })
+  e2.onFinally(() => {
+    emit3.push(4)
+  })
+
+  const eq1: (typeof emit1)[] = [emit1, [[1], [1]]]
+  const eq2: (typeof emit2)[] = [emit2, ['cancel4', 'cancel4']]
+  const eq3: (typeof emit3)[] = [emit3, [4, 3, 3, 4]]
+  jsonEq(eq1, eq2, eq3)
 })
 
 test('移除事件-返回的取消函数', async () => {
@@ -146,10 +212,10 @@ test('移除事件-返回的取消函数', async () => {
   instance.emit('test', 1, 2).catch(() => {})
 
   await Promise.resolve()
-  e.onResolve((res) => {
+  e.onResolved((res) => {
     on1.push(res)
   })
-  e.onReject!((err) => {
+  e.onRejected((err) => {
     emit1.push(err)
   })
 
@@ -183,7 +249,7 @@ test('移除事件-off-单个', async () => {
   instance.emit('test', 1, 2).catch(() => {})
 
   await Promise.resolve()
-  e.onReject!((err) => {
+  e.onRejected((err) => {
     emit1.push(err)
   })
 
@@ -294,7 +360,7 @@ test('只异步触发一次-忽略', async () => {
   const emit2: string[] = []
   const event = AsyncEventChannel.emit_ignore + 'click'
 
-  instance.emit(event).onResolve(() => {
+  instance.emit(event).onResolved(() => {
     emit1.push(1)
   })
   instance.emit(event).catch((err) => {
@@ -323,7 +389,7 @@ test('只异步触发一次-覆盖', async () => {
   instance.emit(event).catch((err) => {
     emit1.push(err)
   })
-  instance.emit(event).onResolve(() => {
+  instance.emit(event).onResolved(() => {
     emit2.push(1)
   })
 
