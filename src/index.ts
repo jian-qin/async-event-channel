@@ -305,10 +305,11 @@ const useEvent =
       } & ProxyHook
     }
 
-    const _event = base + randomString(16)
+    const _event = base + randomString()
     const keys = ['on', 'once', 'off', 'size', 'has'] as const
     const hook: ProxyCtx['hook'] = {
-      all: instance.hook.all,
+      all: (listener) =>
+        instance.hook.all((result) => result.payload[0] === _event && listener(result)),
       beforeOn: (listener) => instance.hook.beforeOn(_event, listener),
       afterOn: (listener) => instance.hook.afterOn(_event, listener),
       beforeEmit: (listener) => instance.hook.beforeEmit(_event, listener),
@@ -379,7 +380,7 @@ const assert: {
 }
 
 export const randomString = (
-  length: number,
+  length = 16,
   chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ) => Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
 
