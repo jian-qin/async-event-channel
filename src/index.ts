@@ -340,6 +340,95 @@ const useEvent =
     return proxy as unknown as ProxyCtx
   }
 
+export const randomString = (
+  length = 16,
+  chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+) => {
+  if (typeof length !== 'number') throw Error('length must be a number')
+  if (typeof chars !== 'string') throw Error('chars must be a string')
+  return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
+
+export type UsePromiseResult<T = unknown, E = any> = Promise<T> & {
+  readonly onResolved: (cb: (value: T) => void) => void
+  readonly onRejected: (cb: (reason: E) => void) => void
+  readonly onFinally: (cb: () => void) => void
+}
+
+export const usePromise = <T = unknown, E = any>() => {
+  const resolves = new Set<(value: T) => void>()
+  const rejects = new Set<(reason: E) => void>()
+  const finallys = new Set<() => void>()
+  const result = {
+    state: 'pending' as 'pending' | 'resolved' | 'rejected',
+    value: null as T,
+    reason: null as E,
+  }
+
+  const promise = Object.defineProperties(
+    new Promise<T>((_resolve, _reject) => {
+      resolves.add(_resolve)
+      rejects.add(_reject)
+    }),
+    {
+      onResolved: {
+        value: (cb: Parameters<typeof resolves.add>[0]) => {
+          assert.listener(cb)
+          if (result.state === 'pending') {
+            resolves.add(cb)
+          } else if (result.state === 'resolved') {
+            cb(result.value)
+          }
+        },
+      },
+      onRejected: {
+        value: (cb: Parameters<typeof rejects.add>[0]) => {
+          assert.listener(cb)
+          if (result.state === 'pending') {
+            rejects.add(cb)
+          } else if (result.state === 'rejected') {
+            cb(result.reason)
+          }
+        },
+      },
+      onFinally: {
+        value: (cb: Parameters<typeof finallys.add>[0]) => {
+          assert.listener(cb)
+          if (result.state === 'pending') {
+            finallys.add(cb)
+          } else {
+            cb()
+          }
+        },
+      },
+    }
+  ) as UsePromiseResult<T, E>
+
+  const finallyd = () => {
+    finallys.forEach((cb) => cb())
+    resolves.clear()
+    rejects.clear()
+    finallys.clear()
+    return promise
+  }
+  const resolve = (value: T) => {
+    if (result.state !== 'pending') return promise
+    result.state = 'resolved'
+    result.value = value
+    resolves.forEach((cb) => cb(value))
+    return finallyd()
+  }
+  const reject = (reason: E) => {
+    if (result.state !== 'pending') return promise
+    result.state = 'rejected'
+    result.reason = reason
+    rejects.forEach((cb) => cb(reason))
+    return finallyd()
+  }
+
+  return [promise, resolve, reject] as const
+}
+
 const assert: {
   listener_or_emitReturn: (value: unknown) => boolean
   event: (event: unknown) => asserts event is Parameters<EventChannel['on']>[0]
@@ -377,86 +466,4 @@ const assert: {
     if (assert.listener_or_emitReturn(value)) return
     throw Error('value must be "on" | "emit" | function | emit return value')
   },
-}
-
-export const randomString = (
-  length = 16,
-  chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-) => Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-
-export type UsePromiseResult<T = unknown, E = any> = Promise<T> & {
-  readonly onResolved: (cb: (value: T) => void) => void
-  readonly onRejected: (cb: (reason: E) => void) => void
-  readonly onFinally: (cb: () => void) => void
-}
-
-export const usePromise = <T = unknown, E = any>() => {
-  const resolves = new Set<(value: T) => void>()
-  const rejects = new Set<(reason: E) => void>()
-  const finallys = new Set<() => void>()
-  const result = {
-    state: 'pending' as 'pending' | 'resolved' | 'rejected',
-    value: null as T,
-    reason: null as E,
-  }
-
-  const promise = Object.defineProperties(
-    new Promise<T>((_resolve, _reject) => {
-      resolves.add(_resolve)
-      rejects.add(_reject)
-    }),
-    {
-      onResolved: {
-        value: (cb: Parameters<typeof resolves.add>[0]) => {
-          if (result.state === 'pending') {
-            resolves.add(cb)
-          } else if (result.state === 'resolved') {
-            cb(result.value)
-          }
-        },
-      },
-      onRejected: {
-        value: (cb: Parameters<typeof rejects.add>[0]) => {
-          if (result.state === 'pending') {
-            rejects.add(cb)
-          } else if (result.state === 'rejected') {
-            cb(result.reason)
-          }
-        },
-      },
-      onFinally: {
-        value: (cb: Parameters<typeof finallys.add>[0]) => {
-          if (result.state === 'pending') {
-            finallys.add(cb)
-          } else {
-            cb()
-          }
-        },
-      },
-    }
-  ) as UsePromiseResult<T, E>
-
-  const finallyd = () => {
-    finallys.forEach((cb) => cb())
-    resolves.clear()
-    rejects.clear()
-    finallys.clear()
-    return promise
-  }
-  const resolve = (value: T) => {
-    if (result.state !== 'pending') return promise
-    result.state = 'resolved'
-    result.value = value
-    resolves.forEach((cb) => cb(value))
-    return finallyd()
-  }
-  const reject = (reason: E) => {
-    if (result.state !== 'pending') return promise
-    result.state = 'rejected'
-    result.reason = reason
-    rejects.forEach((cb) => cb(reason))
-    return finallyd()
-  }
-
-  return [promise, resolve, reject] as const
 }
