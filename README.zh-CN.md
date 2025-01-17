@@ -48,9 +48,19 @@ npm install async-event-channel
 
 ## 辅助方法
 
-- `useScope` 事件通信的作用域：通过代理实例记录事件的取消方法；销毁代理实例，取消记录的所有事件
+- `useScope` 事件通信的作用域
 
-- `useEvent` 固定事件名称：生成固定了事件名称的代理实例，可以直接使用方法不用传事件名称
+  - 介绍：通过代理实例记录事件的取消方法
+
+  - 功能：销毁代理实例，取消记录的所有事件，支持多层嵌套
+
+- `useEvent` 固定事件名称
+
+  - 介绍：通过代理实例生成固定了事件名称的代理实例
+
+  - 功能：和 `useScope` 一样，拥有事件通信的作用域
+
+  - 注意：无法在已经固定了事件名称的代理实例上再次调用 `useEvent` 方法，当然再次调用 `useScope` 则不受是否固定事件名称的影响
 
 ## 其他方法
 
@@ -188,6 +198,35 @@ click.emit('点击事件')
 
 // 打印：
 // 点击事件
+```
+
+- 嵌套的固定事件名称和作用域
+
+```typescript
+// 嵌套层级：useScope > useEvent > useScope
+const scope1 = instance.useScope()
+const click1 = scope1.useEvent()
+const scope2 = click1.useScope()
+
+// 报错：不能在已经固定了事件名称的代理实例上再次调用 `useEvent` 方法
+// const click2 = scope2.useEvent()
+
+scope1.on(scope2.$event, () => {
+  console.log('第一层')
+})
+click1.on(() => {
+  console.log('第二层')
+})
+scope2.on(() => {
+  console.log('第三层')
+})
+
+scope2.emit()
+
+// 打印：
+// 第一层
+// 第二层
+// 第三层
 ```
 
 - 参数返回值的泛型

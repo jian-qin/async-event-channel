@@ -751,14 +751,16 @@ test('嵌套-固定事件名称>事件通信的作用域>事件通信的作用�
   jsonEq(eq1, eq2)
 })
 
-test('嵌套-事件通信的作用域>固定事件名称>事件通信的作用域, 嵌套实例的useEvent只能固定一次', async () => {
+test('嵌套-事件通信的作用域>固定事件名称>事件通信的作用域, 嵌套实例的useEvent只能固定一次, useScope继承useEvent事件名称', async () => {
   const instance = new AsyncEventChannel()
   const scope = instance.useScope()
   const click = scope.useEvent()
   const scope2 = click.useScope()
-  const click_name = click.$event
+  const click_name = scope2.$event
   const size1: number[] = []
   const has1: boolean[] = []
+
+  expect(click.$event === scope2.$event).toBeTruthy()
 
   instance.on(click_name, () => {})
   scope.on(click_name, () => {})

@@ -48,9 +48,19 @@ npm install async-event-channel
 
 ## Auxiliary methods
 
-- `useScope` Event communication scope: Record the cancellation method of the event through the proxy instance; Destroy the proxy instance and cancel all recorded events
+- `useScope` Event communication scope
 
-- `useEvent` Fixed event name: Generate a proxy instance with a fixed event name, which can directly use methods without passing the event name
+  - Introduction: Record the cancellation method of the event through the proxy instance
+
+  - Function: Destroy the proxy instance, cancel all recorded events, and support multi-level nesting
+
+- `useEvent` Fixed event name
+
+  - Introduction: Generate a proxy instance with a fixed event name through the proxy instance
+
+  - Function: Same as `useScope`, with the scope of event communication
+
+  - Note: You cannot call the `useEvent` method again on a proxy instance with a fixed event name. Of course, calling `useScope` again is not affected by whether the event name is fixed
 
 ## Other methods
 
@@ -188,6 +198,35 @@ click.emit('click event')
 
 // Print:
 // click event
+```
+
+- Nested fixed event names and scopes
+
+```typescript
+// Nested levels: useScope > useEvent > useScope
+const scope1 = instance.useScope()
+const click1 = scope1.useEvent()
+const scope2 = click1.useScope()
+
+// Error: Cannot call the `useEvent` method again on a proxy instance with a fixed event name
+// const click2 = scope2.useEvent()
+
+scope1.on(scope2.$event, () => {
+  console.log('First layer')
+})
+click1.on(() => {
+  console.log('Second layer')
+})
+scope2.on(() => {
+  console.log('Third layer')
+})
+
+scope2.emit()
+
+// Print:
+// First layer
+// Second layer
+// Third layer
 ```
 
 - Generic return value of parameters
