@@ -560,6 +560,24 @@ test(
   testHook('afterOff', [{ type: 'off', position: 'after', payload: ['click', 'FN'] }])
 )
 
+test('钩子-beforeOff/afterOff 过滤无效off执行', async () => {
+  const instance = new AsyncEventChannel()
+  const hook1: number[] = []
+
+  const listener = () => {}
+  instance.on('click', listener)
+
+  instance.hook.beforeOff('click', () => {
+    hook1.push(1)
+  })
+
+  instance.off('click', listener)
+  instance.off('click', listener)
+
+  const eq1: (typeof hook1)[] = [hook1, [1]]
+  jsonEq(eq1)
+})
+
 test('事件通信的作用域', async () => {
   const instance = new AsyncEventChannel()
   const scope = instance.useScope()
@@ -588,18 +606,62 @@ test('事件通信的作用域', async () => {
   jsonEq(eq1)
 })
 
-test('固定事件名称-默认通信', async () => {
+test('事件通信的作用域-多层嵌套', async () => {
+  const instance = new AsyncEventChannel()
+  const scope1 = instance.useScope()
+  const scope2 = scope1.useScope()
+  const size1: boolean[][] = []
+
+  instance.on('instance', () => {})
+  scope1.on('scope1', () => {})
+  scope2.on('scope2', () => {})
+
+  size1.push([
+    instance.has('instance', 'on'),
+    instance.has('scope1', 'on'),
+    instance.has('scope2', 'on'),
+  ])
+
+  scope2.$destroy()
+  size1.push([
+    instance.has('instance', 'on'),
+    instance.has('scope1', 'on'),
+    instance.has('scope2', 'on'),
+  ])
+
+  scope1.$destroy()
+  size1.push([
+    instance.has('instance', 'on'),
+    instance.has('scope1', 'on'),
+    instance.has('scope2', 'on'),
+  ])
+
+  const eq1: (typeof size1)[] = [
+    size1,
+    [
+      [true, true, true],
+      [true, true, false],
+      [true, false, false],
+    ],
+  ]
+  jsonEq(eq1)
+})
+
+test('固定事件名称-默认通信, 参数泛型', async () => {
   const instance = new AsyncEventChannel()
   const click = instance.useEvent<number[], [string]>()
   const on1: number[] = []
   const size1: number[] = []
+  const res1: string[][] = []
 
   click.on((res) => {
     on1.push(res)
     return 'on'
   })
 
-  click.emit(1)
+  click.emit(1).onResolved((res) => {
+    res1.push(res)
+  })
 
   size1.push(click.size('on'))
   click.off('on')
@@ -609,7 +671,8 @@ test('固定事件名称-默认通信', async () => {
 
   const eq1: (typeof on1)[] = [on1, [1]]
   const eq2: (typeof size1)[] = [size1, [1, 0]]
-  jsonEq(eq1, eq2)
+  const eq3: (typeof res1)[] = [res1, [['on']]]
+  jsonEq(eq1, eq2, eq3)
 })
 
 test('固定事件名称-异步通信', async () => {
@@ -625,4 +688,100 @@ test('固定事件名称-异步通信', async () => {
 
   const eq1: (typeof on1)[] = [on1, [1]]
   jsonEq(eq1)
+})
+
+test('固定事件名称-也拥有作用域', async () => {
+  const instance = new AsyncEventChannel()
+  const click = instance.useEvent()
+  const click_name = click.$event
+  const size1: boolean[][] = []
+
+  instance.on('instance', () => {})
+  click.on(() => {})
+
+  size1.push([instance.has('instance', 'on'), instance.has(click_name, 'on')])
+
+  click.$destroy()
+  size1.push([instance.has('instance', 'on'), instance.has(click_name, 'on')])
+
+  const eq1: (typeof size1)[] = [
+    size1,
+    [
+      [true, true],
+      [true, false],
+    ],
+  ]
+  jsonEq(eq1)
+})
+
+test('嵌套-固定事件名称>事件通信的作用域>事件通信的作用域, 嵌套实例的useEvent只能固定一次', async () => {
+  const instance = new AsyncEventChannel()
+  const click = instance.useEvent()
+  const scope1 = click.useScope()
+  const scope2 = scope1.useScope()
+  const click_name = click.$event
+  const size1: number[] = []
+  const has1: boolean[] = []
+
+  instance.on(click_name, () => {})
+  click.on(() => {})
+  scope1.on(() => {})
+  scope2.on(() => {})
+
+  // @ts-expect-error
+  has1.push(!!click.useEvent)
+  // @ts-expect-error
+  has1.push(!!scope1.useEvent)
+  // @ts-expect-error
+  has1.push(!!scope2.useEvent)
+
+  size1.push(instance.size(click_name, 'on'))
+
+  scope2.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  scope1.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  click.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  const eq1: (typeof size1)[] = [size1, [4, 3, 2, 1]]
+  const eq2: (typeof has1)[] = [has1, [false, false, false]]
+  jsonEq(eq1, eq2)
+})
+
+test('嵌套-事件通信的作用域>固定事件名称>事件通信的作用域, 嵌套实例的useEvent只能固定一次', async () => {
+  const instance = new AsyncEventChannel()
+  const scope = instance.useScope()
+  const click = scope.useEvent()
+  const scope2 = click.useScope()
+  const click_name = click.$event
+  const size1: number[] = []
+  const has1: boolean[] = []
+
+  instance.on(click_name, () => {})
+  scope.on(click_name, () => {})
+  click.on(() => {})
+  scope2.on(() => {})
+
+  // @ts-expect-error
+  has1.push(!!click.useEvent)
+  // @ts-expect-error
+  has1.push(!!scope2.useEvent)
+
+  size1.push(instance.size(click_name, 'on'))
+
+  scope2.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  click.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  scope.$destroy()
+  size1.push(instance.size(click_name, 'on'))
+
+  const eq1: (typeof size1)[] = [size1, [4, 3, 2, 1]]
+  const eq2: (typeof has1)[] = [has1, [false, false]]
+  jsonEq(eq1, eq2)
 })
