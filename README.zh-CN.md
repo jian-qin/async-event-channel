@@ -52,7 +52,7 @@ npm install async-event-channel
 
   - 介绍：通过代理实例记录事件的取消方法
 
-  - 功能：销毁代理实例，取消记录的所有事件，支持多层嵌套
+  - 功能：销毁代理实例，取消记录的所有事件，支持多层嵌套，过滤器拦截事件
 
 - `useEvent` 固定事件名称
 
@@ -183,6 +183,27 @@ instance.emit('click')
 // 销毁代理
 scope.$destroy()
 instance.emit // Error: The event has been destroyed
+```
+
+- 作用域上的过滤器
+
+```typescript
+const scope = instance.useScope(({ type, payload }) => {
+  if (type === 'off' && payload[0] === 'click') {
+    return false
+  }
+})
+
+scope.on('click', () => {
+  console.log('未移除')
+})
+
+scope.off('click', 'on')
+
+instance.emit('click')
+
+// 打印：
+// 未移除
 ```
 
 - 固定事件名称

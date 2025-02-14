@@ -647,6 +647,68 @@ test('事件通信的作用域-多层嵌套', async () => {
   jsonEq(eq1)
 })
 
+test('事件通信的作用域-过滤器', async () => {
+  const instance = new AsyncEventChannel()
+  const scope1 = instance.useScope(({ payload }) => {
+    if (payload[0] === 'a') {
+      return false
+    }
+  })
+  const scope2 = scope1.useScope()
+  const res1: ['on' | 'emit' | 'off', string][] = []
+  const catch1: string[] = []
+
+  instance.hook.all(({ type, position, payload }) => {
+    position === 'after' && res1.push([type, payload[0]])
+  })
+
+  const res_on1 = scope1.on('a', () => {})
+  if (!res_on1) {
+    catch1.push('on-a-filter')
+  }
+  scope1.emit('a').catch((err) => {
+    catch1.push(err)
+  })
+  scope1.off('a', 'on')
+
+  const res_on2 = scope2.on('a', () => {})
+  if (!res_on2) {
+    catch1.push('on-a-filter')
+  }
+  scope2.emit('a').catch((err) => {
+    catch1.push(err)
+  })
+  scope2.off('a', 'on')
+
+  scope1.on('A', () => {})
+  scope1.emit('A').catch((err) => {
+    catch1.push(err)
+  })
+  scope1.off('A', 'on')
+
+  instance.on('a', () => {})
+  instance.emit('a').catch((err) => {
+    catch1.push(err)
+  })
+  instance.off('a', 'on')
+
+  await Promise.resolve()
+
+  const eq1: (typeof res1)[] = [
+    res1,
+    [
+      ['on', 'A'],
+      ['emit', 'A'],
+      ['off', 'A'],
+      ['on', 'a'],
+      ['emit', 'a'],
+      ['off', 'a'],
+    ],
+  ]
+  const eq2: (typeof catch1)[] = [catch1, ['on-a-filter', 'on-a-filter', 'filter', 'filter']]
+  jsonEq(eq1, eq2)
+})
+
 test('固定事件名称-默认通信, 参数泛型', async () => {
   const instance = new AsyncEventChannel()
   const click = instance.useEvent<number[], [string]>()

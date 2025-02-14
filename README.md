@@ -52,7 +52,7 @@ npm install async-event-channel
 
   - Introduction: Record the cancellation method of the event through the proxy instance
 
-  - Function: Destroy the proxy instance, cancel all recorded events, and support multi-level nesting
+  - Function: Destroy the proxy instance, cancel all recorded events, support multi-level nesting, and filter intercept events
 
 - `useEvent` Fixed event name
 
@@ -183,6 +183,27 @@ instance.emit('click')
 // Destroy the proxy
 scope.$destroy()
 instance.emit // Error: The event has been destroyed
+```
+
+- Event communication scope filter
+
+```typescript
+const scope = instance.useScope(({ type, payload }) => {
+  if (type === 'off' && payload[0] === 'click') {
+    return false
+  }
+})
+
+scope.on('click', () => {
+  console.log('Not removed')
+})
+
+scope.off('click', 'on')
+
+instance.emit('click')
+
+// Print:
+// Not removed
 ```
 
 - Fixed event name

@@ -24,6 +24,7 @@ type UseScope_Result = EventChannel & {
   $destroy: () => void
 }
 type UseEventScope_Result = Omit<ReturnType<EventChannel['useEvent']>, 'useEvent'>
+type UseScope_Listener = (result: Pick<HookResult, 'type' | 'payload'>) => false | void
 
 class Base {
   static readonly on_ignore = '@o_i;'
@@ -222,10 +223,12 @@ export default class EventChannel extends Base {
     return !!this._emits.get(event)?.has(value)
   }
 
-  useScope(this: EventChannel): UseScope_Result
-  useScope(this: UseScope_Result): UseScope_Result
-  useScope(this: UseEventScope_Result): UseEventScope_Result
-  useScope() {
+  useScope(this: EventChannel, listener?: UseScope_Listener): UseScope_Result
+  useScope(this: UseScope_Result, listener?: UseScope_Listener): UseScope_Result
+  useScope(this: UseEventScope_Result, listener?: UseScope_Listener): UseEventScope_Result
+  useScope(filter?: UseScope_Listener) {
+    typeof filter !== 'undefined' && assert.listener(filter)
+
     const _offs = new Set<[string, Listener | ReturnType<EventChannel['emit']>]>()
     const clear = () => {
       _offs.forEach(([event, value]) => this.off(event, value))
@@ -260,6 +263,9 @@ export default class EventChannel extends Base {
         }
         if (key === 'on' || key === 'once') {
           return ((event, listener) => {
+            if (filter?.({ type: 'on', payload: [event, listener] }) === false) {
+              return
+            }
             const result = target[key](event, listener)
             result && _offs.add([event, listener])
             return result
@@ -267,10 +273,21 @@ export default class EventChannel extends Base {
         }
         if (key === 'emit') {
           return ((event, ...args) => {
+            if (filter?.({ type: 'emit', payload: [event, ...args] }) === false) {
+              return usePromise()[2]('filter')
+            }
             const result = target[key](event, ...args)
             result.cancel && _offs.add([event, result])
             return result
           }) as EventChannel['emit']
+        }
+        if (key === 'off') {
+          return ((event, value) => {
+            if (filter?.({ type: 'off', payload: [event, value] }) === false) {
+              return
+            }
+            return target[key](event, value)
+          }) as EventChannel['off']
         }
         return Reflect.get(target, key)
       },
