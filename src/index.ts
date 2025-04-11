@@ -92,6 +92,7 @@ export default class AsyncEventChannel {
     if (listener.options?.wait) {
       _result = await Promise.resolve(_result)
     }
+    if (!this._listeners.has(listener.result.id)) return
     trigger.replys.set(listener.result.id, _result)
     this._hook_run(trigger.result.id, 'reply')
     onReply(trigger.replys, trigger.result)
