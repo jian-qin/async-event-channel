@@ -22,12 +22,12 @@ export type TriggersValue = {
   event: string
   params: unknown
   result: Result
+  replys: Map<number, unknown>
   options?: {
     wait?: boolean
     once?: boolean
-    onReply?: (params: Map<number, unknown>, result: Result) => void
+    onReply?: (params: TriggersValue['replys'], result: Result) => void
   }
-  replys: Map<number, unknown>
 }
 
 type HooksValue = {
@@ -47,38 +47,41 @@ export default class AsyncEventChannel {
   private _triggers = new Map<number, TriggersValue>()
   private _hooks = new Map<number, HooksValue>()
 
+  private _result_gen(map: Map<number, ListenersValue> | Map<number, TriggersValue> | Map<number, HooksValue>) {
+    const id = ++this._id
+    let off: Result['off']
+    if (map === this._listeners || map === this._triggers) {
+      off = () => this._map_del(map, id)
+    } else {
+      off = () => {
+        map.delete(id)
+      }
+    }
+    return Object.freeze({ id, off, has: () => map.has(id) })
+  }
+
   private _map_get<T extends ListenersValue | TriggersValue>(map: Map<number, T>, target: Target) {
     const has = typeof target === 'string' ? (event: string) => event === target : (event: string) => target.test(event)
     return [...map.values()].filter(({ event }) => has(event))
   }
 
-  private _map_del(map: Map<number, ListenersValue | TriggersValue>, id: number) {
+  private _map_del(map: Map<number, ListenersValue> | Map<number, TriggersValue>, id: number) {
     if (!map.has(id)) return
     this._hook_run(id, 'off')
     map.delete(id)
   }
 
   private _listeners_add(value: Pick<ListenersValue, 'event' | 'listener' | 'options'>) {
-    const id = ++this._id
-    const result = Object.freeze({
-      id,
-      has: () => this._listeners.has(id),
-      off: () => this._map_del(this._listeners, id),
-    })
-    this._listeners.set(id, { ...value, result })
-    this._hook_run(id, 'on')
+    const result = this._result_gen(this._listeners)
+    this._listeners.set(result.id, { ...value, result })
+    this._hook_run(result.id, 'on')
     return result
   }
 
   private _triggers_add(value: Pick<TriggersValue, 'event' | 'params' | 'options'>) {
-    const id = ++this._id
-    const result = Object.freeze({
-      id,
-      has: () => this._triggers.has(id),
-      off: () => this._map_del(this._triggers, id),
-    })
-    this._triggers.set(id, { ...value, result, replys: new Map() })
-    this._hook_run(id, 'emit')
+    const result = this._result_gen(this._triggers)
+    this._triggers.set(result.id, { ...value, result, replys: new Map() })
+    this._hook_run(result.id, 'emit')
     return result
   }
 
@@ -167,15 +170,8 @@ export default class AsyncEventChannel {
   }
 
   hook(target: HooksValue['target'], listener: HooksValue['listener'], options?: HooksValue['options']) {
-    const id = ++this._id
-    const result = Object.freeze({
-      id,
-      has: () => this._hooks.has(id),
-      off: () => {
-        this._hooks.delete(id)
-      },
-    })
-    this._hooks.set(id, { target, listener, options, result, has: this._hook_has(target) })
+    const result = this._result_gen(this._hooks)
+    this._hooks.set(result.id, { target, listener, options, result, has: this._hook_has(target) })
     return result
   }
 
