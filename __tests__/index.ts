@@ -1,5 +1,5 @@
 import { expect, test } from '@jest/globals'
-import AsyncEventChannel from '../src/index'
+import AsyncEventChannel, { type HooksValue } from '../src/index'
 
 const jsonEq = (one: unknown, ...arr: unknown[]) => {
   const _one = JSON.stringify(one)
@@ -334,5 +334,99 @@ test('当前on和emit的数量siez、off批量注销on和emit', async () => {
     ['1-size:事件,数量', 'a', { on: 0, emit: 2 }, 'b', { on: 1, emit: 1 }],
     ['1-off-注销:事件,类型', '/.+/', 'all', undefined],
     ['1-size:事件,数量', 'a', { on: 0, emit: 0 }, 'b', { on: 0, emit: 0 }],
+  ])
+})
+
+test('hook监听单个/批量/全部、只监听一次', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  const simplify = (params: Parameters<HooksValue['listener']>[0]) => {
+    const { on, emit } = params
+    return {
+      ...params,
+      event: on?.event ?? emit?.event,
+      on: on?.result.id,
+      emit: emit?.result.id,
+    }
+  }
+
+  res.push([
+    '1-hook-注册:id',
+    ctx.hook(/.+/, (params, { id }) => {
+      res.push(['1-hook监听:params,id', simplify(params), id])
+    }).id,
+  ])
+  res.push([
+    '2-hook-注册:id',
+    ctx.hook(
+      'a',
+      (params, { id }) => {
+        res.push(['2-hook监听:params,id', simplify(params), id])
+      },
+      { once: true, type: 'on' }
+    ).id,
+  ])
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      return '1-on-返回参数-同步'
+    }).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on(
+      'a',
+      (params, { id }) => {
+        res.push(['2-on-接收:params,id', params, id])
+        return '2-on-返回参数-异步'
+      },
+      { once: true, wait: true }
+    ).id,
+  ])
+  const result = ctx.emit('a', '1-emit-参数', {
+    onReply(params, { id }) {
+      res.push(['1-emit-接收返回参数,id', Array.from(params), id])
+    },
+  })
+  res.push(['1-emit-触发:id', result.id])
+
+  await sleep()
+
+  result.off()
+
+  await sleep(1000)
+
+  jsonEq(res, [
+    ['1-hook-注册:id', 1],
+    ['2-hook-注册:id', 2],
+    ['1-hook监听:params,id', { on: 3, emit: undefined, type: 'on', event: 'a' }, 1],
+    ['2-hook监听:params,id', { on: 3, emit: undefined, type: 'on', event: 'a' }, 2],
+    ['1-on-注册:id', 3],
+    ['1-hook监听:params,id', { on: 4, emit: undefined, type: 'on', event: 'a' }, 1],
+    ['2-on-注册:id', 4],
+
+    ['1-hook监听:params,id', { on: undefined, emit: 5, type: 'emit', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 3, emit: 5, type: 'trigger', event: 'a' }, 1],
+    ['1-on-接收:params,id', '1-emit-参数', 3],
+    ['1-hook监听:params,id', { on: 3, emit: 5, type: 'reply', event: 'a' }, 1],
+    ['1-emit-接收返回参数,id', [[3, '1-on-返回参数-同步']], 5],
+    ['1-hook监听:params,id', { on: 4, emit: 5, type: 'trigger', event: 'a' }, 1],
+    ['2-on-接收:params,id', '1-emit-参数', 4],
+    ['1-emit-触发:id', 5],
+    ['1-hook监听:params,id', { on: 4, emit: 5, type: 'reply', event: 'a' }, 1],
+
+    ['1-hook监听:params,id', { on: 4, emit: undefined, type: 'off', event: 'a' }, 1],
+    [
+      '1-emit-接收返回参数,id',
+      [
+        [3, '1-on-返回参数-同步'],
+        [4, '2-on-返回参数-异步'],
+      ],
+      5,
+    ],
+    ['1-hook监听:params,id', { on: undefined, emit: 5, type: 'off', event: 'a' }, 1],
   ])
 })
