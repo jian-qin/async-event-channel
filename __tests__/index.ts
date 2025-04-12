@@ -304,7 +304,7 @@ test('只执行一次的异步emit、只执行一次的同步和异步的on', as
   ])
 })
 
-test('当前on和emit的数量siez、off批量注销on和emit', async () => {
+test('当前on和emit的数量siez、off单个注销和批量注销on和emit', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
 
@@ -318,9 +318,14 @@ test('当前on和emit的数量siez、off批量注销on和emit', async () => {
   res.push(['1-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b')])
   res.push(['1-off-注销:事件,类型', 'a', 'on', ctx.off('a', 'on')])
 
-  res.push(['1-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b')])
-  res.push(['1-off-注销:事件,类型', '/.+/', 'all', ctx.off(/.+/)])
-  res.push(['1-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b')])
+  res.push(['2-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b')])
+  res.push(['2-off-注销:事件,类型', '/.*/', 'all', ctx.off(/.*/)])
+  res.push(['3-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b')])
+
+  res.push(['4-on-注册:id', ctx.on('a', () => {}).id])
+  res.push(['4-size:id', ctx.size(7)])
+  res.push(['3-off-注销:id', ctx.off(7)])
+  res.push(['5-size:事件,数量', '/.*/', ctx.size(/.*/)])
 
   jsonEq(res, [
     ['1-on-注册:id', 1],
@@ -329,11 +334,16 @@ test('当前on和emit的数量siez、off批量注销on和emit', async () => {
     ['1-emit-触发:id', 4],
     ['2-emit-触发:id', 5],
     ['3-emit-触发:id', 6],
-    ['1-size:事件,数量', 'a', { on: 2, emit: 2 }, 'b', { on: 1, emit: 1 }],
+    ['1-size:事件,数量', 'a', { on: 2, emit: 2, count: 4 }, 'b', { on: 1, emit: 1, count: 2 }],
     ['1-off-注销:事件,类型', 'a', 'on', undefined],
-    ['1-size:事件,数量', 'a', { on: 0, emit: 2 }, 'b', { on: 1, emit: 1 }],
-    ['1-off-注销:事件,类型', '/.+/', 'all', undefined],
-    ['1-size:事件,数量', 'a', { on: 0, emit: 0 }, 'b', { on: 0, emit: 0 }],
+    ['2-size:事件,数量', 'a', { on: 0, emit: 2, count: 2 }, 'b', { on: 1, emit: 1, count: 2 }],
+    ['2-off-注销:事件,类型', '/.*/', 'all', undefined],
+    ['3-size:事件,数量', 'a', { on: 0, emit: 0, count: 0 }, 'b', { on: 0, emit: 0, count: 0 }],
+
+    ['4-on-注册:id', 7],
+    ['4-size:id', { on: 1, emit: 0, count: 1 }],
+    ['3-off-注销:id', undefined],
+    ['5-size:事件,数量', '/.*/', { on: 0, emit: 0, count: 0 }],
   ])
 })
 
@@ -353,7 +363,7 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
 
   res.push([
     '1-hook-注册:id',
-    ctx.hook(/.+/, (params, { id }) => {
+    ctx.hook(/.*/, (params, { id }) => {
       res.push(['1-hook监听:params,id', simplify(params), id])
     }).id,
   ])
@@ -428,5 +438,80 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
       5,
     ],
     ['1-hook监听:params,id', { on: undefined, emit: 5, type: 'off', event: 'a' }, 1],
+  ])
+})
+
+test('useScope收集off、审核on/emit/off', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  const scope = ctx.useScope({
+    on: (event) => {
+      if (event === 'a') {
+        throw new Error('on-阻止注册')
+      }
+    },
+    emit: (event) => {
+      if (event === 'c') {
+        throw new Error('emit-阻止注册')
+      }
+    },
+    off: (params) => {
+      const event = params[params.type]!.event
+      if (event === 'b') {
+        throw new Error('off-阻止注销')
+      }
+    },
+  })
+
+  expect(() => {
+    res.push(['1-on-注册:id', scope.on('a', () => {}).id])
+  }).toThrow()
+  res.push(['2-on-注册:id', scope.on('b', () => {}).id])
+  res.push(['3-on-注册:id', ctx.on('b', () => {}).id])
+
+  expect(() => {
+    res.push(['1-emit-触发:id', scope.emit('c', null, { wait: true }).id])
+  }).toThrow()
+  res.push(['2-emit-触发:id', scope.emit('d', null, { wait: true }).id])
+  res.push(['3-emit-触发:id', ctx.emit('d', null, { wait: true }).id])
+
+  expect(() => {
+    res.push(['1-off-注销:事件,类型', 'b', 'on', scope.off('b', 'on')])
+  }).toThrow()
+
+  res.push(['1-size:事件,数量', 'a', scope.size('a'), 'b', scope.size('b'), 'c', scope.size('c'), 'd', scope.size('d')])
+
+  res.push(['1-scope-销毁', scope.destroy()])
+  res.push(['2-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b'), 'c', ctx.size('c'), 'd', ctx.size('d')])
+
+  jsonEq(res, [
+    ['2-on-注册:id', 1],
+    ['3-on-注册:id', 2],
+    ['2-emit-触发:id', 3],
+    ['3-emit-触发:id', 4],
+    [
+      '1-size:事件,数量',
+      'a',
+      { on: 0, emit: 0, count: 0 },
+      'b',
+      { on: 2, emit: 0, count: 2 },
+      'c',
+      { on: 0, emit: 0, count: 0 },
+      'd',
+      { on: 0, emit: 2, count: 2 },
+    ],
+    ['1-scope-销毁', undefined],
+    [
+      '2-size:事件,数量',
+      'a',
+      { on: 0, emit: 0, count: 0 },
+      'b',
+      { on: 1, emit: 0, count: 1 },
+      'c',
+      { on: 0, emit: 0, count: 0 },
+      'd',
+      { on: 0, emit: 1, count: 1 },
+    ],
   ])
 })
