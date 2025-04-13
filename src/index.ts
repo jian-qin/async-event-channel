@@ -51,7 +51,7 @@ export type HooksValue = {
 export type ScopeOptions = {
   on?: (...params: Parameters<AsyncEventChannel['on']>) => void
   emit?: (...params: Parameters<AsyncEventChannel['emit']>) => void
-  off?: (params: { type: 'on' | 'emit'; on: ListenersValue | null; emit: TriggersValue | null }) => void
+  off?: (params: { type: 'on'; value: ListenersValue } | { type: 'emit'; value: TriggersValue }) => void
 }
 
 export default class AsyncEventChannel {
@@ -116,20 +116,18 @@ export default class AsyncEventChannel {
   private async _on_run(id: number) {
     const trigger = this._triggers.get(id)!
     const listeners = this._map_get(this._listeners, trigger.event)
-    if (listeners.length === 0) return
     const listeners_wait = listeners.some(({ options }) => options?.wait)
     const results = listeners.map((listener) => this._run(listener, trigger))
     if (trigger.options?.wait) return
     if (listeners_wait) {
       await Promise.allSettled(results)
     }
-    this.off(trigger.result.id)
+    trigger.result.off()
   }
 
   private _emit_run(id: number) {
     const listener = this._listeners.get(id)!
     const triggers = this._map_get(this._triggers, listener.event)
-    if (triggers.length === 0) return
     triggers.forEach((trigger) => this._run(listener, trigger))
   }
 
@@ -232,13 +230,17 @@ export default class AsyncEventChannel {
         }
         if (prop === '_off_run') {
           return (id: number) => {
-            const on = target._listeners.get(id) || null
-            const emit = target._triggers.get(id) || null
-            if (on || emit) {
-              options?.off?.({ type: on ? 'on' : 'emit', on, emit })
-              ids.delete(id)
+            const on = target._listeners.get(id)
+            const emit = target._triggers.get(id)
+            if (on) {
+              options?.off?.({ type: 'on', value: on })
+            } else if (emit) {
+              options?.off?.({ type: 'emit', value: emit })
             }
             target._off_run(id)
+            if (on || emit) {
+              ids.delete(id)
+            }
           }
         }
         if (prop === 'clear') {

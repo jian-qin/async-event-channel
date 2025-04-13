@@ -8,6 +8,16 @@ const jsonEq = (one: unknown, ...arr: unknown[]) => {
 
 const sleep = (time = 100) => new Promise((resolve) => setTimeout(resolve, time))
 
+const hookParamsSimplify = (params: Parameters<HooksValue['listener']>[0]) => {
+  const { on, emit } = params
+  return {
+    ...params,
+    event: on?.event ?? emit?.event,
+    on: on && on.result.id,
+    emit: emit && emit.result.id,
+  }
+}
+
 test('同步执行的on和emit、多个on、双向通信', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
@@ -351,20 +361,10 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
 
-  const simplify = (params: Parameters<HooksValue['listener']>[0]) => {
-    const { on, emit } = params
-    return {
-      ...params,
-      event: on?.event ?? emit?.event,
-      on: on?.result.id,
-      emit: emit?.result.id,
-    }
-  }
-
   res.push([
     '1-hook-注册:id',
     ctx.hook(/.*/, (params, { id }) => {
-      res.push(['1-hook监听:params,id', simplify(params), id])
+      res.push(['1-hook监听:params,id', hookParamsSimplify(params), id])
     }).id,
   ])
   res.push([
@@ -372,7 +372,7 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
     ctx.hook(
       'a',
       (params, { id }) => {
-        res.push(['2-hook监听:params,id', simplify(params), id])
+        res.push(['2-hook监听:params,id', hookParamsSimplify(params), id])
       },
       { once: true, type: 'on' }
     ).id,
@@ -412,13 +412,13 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
   jsonEq(res, [
     ['1-hook-注册:id', 1],
     ['2-hook-注册:id', 2],
-    ['1-hook监听:params,id', { on: 3, emit: undefined, type: 'on', event: 'a' }, 1],
-    ['2-hook监听:params,id', { on: 3, emit: undefined, type: 'on', event: 'a' }, 2],
+    ['1-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 1],
+    ['2-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 2],
     ['1-on-注册:id', 3],
-    ['1-hook监听:params,id', { on: 4, emit: undefined, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 4, emit: null, type: 'on', event: 'a' }, 1],
     ['2-on-注册:id', 4],
 
-    ['1-hook监听:params,id', { on: undefined, emit: 5, type: 'emit', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: null, emit: 5, type: 'emit', event: 'a' }, 1],
     ['1-hook监听:params,id', { on: 3, emit: 5, type: 'trigger', event: 'a' }, 1],
     ['1-on-接收:params,id', '1-emit-参数', 3],
     ['1-hook监听:params,id', { on: 3, emit: 5, type: 'reply', event: 'a' }, 1],
@@ -428,7 +428,7 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
     ['1-emit-触发:id', 5],
     ['1-hook监听:params,id', { on: 4, emit: 5, type: 'reply', event: 'a' }, 1],
 
-    ['1-hook监听:params,id', { on: 4, emit: undefined, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 4, emit: null, type: 'off', event: 'a' }, 1],
     [
       '1-emit-接收返回参数,id',
       [
@@ -437,7 +437,7 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
       ],
       5,
     ],
-    ['1-hook监听:params,id', { on: undefined, emit: 5, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: null, emit: 5, type: 'off', event: 'a' }, 1],
   ])
 })
 
@@ -513,5 +513,118 @@ test('useScope收集off、审核on/emit/off', async () => {
       'd',
       { on: 0, emit: 1, count: 1 },
     ],
+  ])
+})
+
+test('on/emit的once执行顺序', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  res.push([
+    '1-hook-注册:id',
+    ctx.hook('a', (params, { id }) => {
+      res.push(['1-hook监听:params,id', hookParamsSimplify(params), id])
+    }).id,
+  ])
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on(
+      'a',
+      (params, { id }) => {
+        res.push(['1-on-接收:params,id', params, id])
+        return '1-on-返回参数'
+      },
+      { once: true }
+    ).id,
+  ])
+  res.push([
+    '1-emit-触发:id',
+    ctx.emit('a', '1-emit-参数', {
+      onReply(params, { id }) {
+        res.push(['1-emit-接收返回参数,id', Array.from(params), id])
+      },
+    }).id,
+  ])
+
+  res.push([
+    '2-emit-触发:id',
+    ctx.emit('a', '2-emit-参数', {
+      once: true,
+      wait: true,
+      onReply(params, { id }) {
+        res.push(['2-emit-接收返回参数,id', Array.from(params), id])
+      },
+    }).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on(
+      'a',
+      async (params, { id }) => {
+        res.push(['2-on-接收:params,id', params, id])
+        await sleep()
+        return '2-on-返回参数'
+      },
+      { once: true, wait: true }
+    ).id,
+  ])
+
+  await sleep(1000)
+
+  jsonEq(res, [
+    ['1-hook-注册:id', 1],
+    ['1-hook监听:params,id', { on: 2, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-on-注册:id', 2],
+    ['1-hook监听:params,id', { on: null, emit: 3, type: 'emit', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 2, emit: 3, type: 'trigger', event: 'a' }, 1],
+    ['1-on-接收:params,id', '1-emit-参数', 2],
+    ['1-hook监听:params,id', { on: 2, emit: 3, type: 'reply', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 2, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-emit-接收返回参数,id', [[2, '1-on-返回参数']], 3],
+    ['1-hook监听:params,id', { on: null, emit: 3, type: 'off', event: 'a' }, 1],
+    ['1-emit-触发:id', 3],
+
+    ['1-hook监听:params,id', { on: null, emit: 4, type: 'emit', event: 'a' }, 1],
+    ['2-emit-触发:id', 4],
+    ['1-hook监听:params,id', { on: 5, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 5, emit: 4, type: 'trigger', event: 'a' }, 1],
+    ['2-on-接收:params,id', '2-emit-参数', 5],
+    ['2-on-注册:id', 5],
+
+    ['1-hook监听:params,id', { on: 5, emit: 4, type: 'reply', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 5, emit: null, type: 'off', event: 'a' }, 1],
+    ['2-emit-接收返回参数,id', [[5, '2-on-返回参数']], 4],
+    ['1-hook监听:params,id', { on: null, emit: 4, type: 'off', event: 'a' }, 1],
+  ])
+})
+
+test('emit同步执行、hook监听id', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  res.push([
+    '1-hook-注册:id',
+    ctx.hook(
+      2,
+      (params, { id }) => {
+        res.push(['1-hook监听:params,id', hookParamsSimplify(params), id])
+      },
+      { type: 'off' }
+    ).id,
+  ])
+  res.push([
+    '1-emit-触发:id',
+    ctx.emit('a', '1-emit-参数', {
+      onReply(params, { id }) {
+        res.push(['1-emit-接收返回参数,id', Array.from(params), id])
+      },
+    }).id,
+  ])
+
+  jsonEq(res, [
+    ['1-hook-注册:id', 1],
+    ['1-hook监听:params,id', { on: null, emit: 2, type: 'off', event: 'a' }, 1],
+    ['1-emit-触发:id', 2],
   ])
 })
