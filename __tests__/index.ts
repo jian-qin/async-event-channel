@@ -516,6 +516,57 @@ test('useScope收集off、审核on/emit/off', async () => {
   ])
 })
 
+test('useScope多层嵌套', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  const scope1 = ctx.useScope()
+  const scope2 = scope1.useScope()
+
+  res.push([
+    '1-hook-注册:id',
+    ctx.hook('a', (params, { id }) => {
+      res.push(['1-hook监听:params,id', hookParamsSimplify(params), id])
+    }).id,
+  ])
+
+  res.push(['1-on-注册:id', ctx.on('a', () => {}).id])
+  res.push(['2-on-注册:id', scope1.on('a', () => {}).id])
+  res.push(['3-on-注册:id', scope2.on('a', () => {}).id])
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+
+  res.push(['1-clear-清空', 'scope2', scope2.clear()])
+  res.push(['2-size:事件,数量', 'a', ctx.size('a')])
+  res.push(['4-on-注册:id', scope2.on('a', () => {}).id])
+  res.push(['3-size:事件,数量', 'a', ctx.size('a')])
+
+  res.push(['1-destroy-销毁', 'scope1', scope1.destroy()])
+  res.push(['4-size:事件,数量', 'a', ctx.size('a')])
+
+  jsonEq(res, [
+    ['1-hook-注册:id', 1],
+    ['1-hook监听:params,id', { on: 2, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-on-注册:id', 2],
+    ['1-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 1],
+    ['2-on-注册:id', 3],
+    ['1-hook监听:params,id', { on: 4, emit: null, type: 'on', event: 'a' }, 1],
+    ['3-on-注册:id', 4],
+    ['1-size:事件,数量', 'a', { on: 3, emit: 0, count: 3 }],
+
+    ['1-hook监听:params,id', { on: 4, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-clear-清空', 'scope2', undefined],
+    ['2-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
+    ['1-hook监听:params,id', { on: 5, emit: null, type: 'on', event: 'a' }, 1],
+    ['4-on-注册:id', 5],
+    ['3-size:事件,数量', 'a', { on: 3, emit: 0, count: 3 }],
+
+    ['1-hook监听:params,id', { on: 3, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { on: 5, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-destroy-销毁', 'scope1', undefined],
+    ['4-size:事件,数量', 'a', { on: 1, emit: 0, count: 1 }],
+  ])
+})
+
 test('on/emit的once执行顺序', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
