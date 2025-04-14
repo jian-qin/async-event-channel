@@ -31,27 +31,20 @@ export type TriggersValue = {
   }
 }
 
+export type HookParams = {
+  type: HookType
+  on: ListenersValue | null
+  emit: TriggersValue | null
+}
+
 export type HooksValue = {
   target: Target
   result: Result
-  listener: (
-    params: {
-      type: HookType
-      on: ListenersValue | null
-      emit: TriggersValue | null
-    },
-    result: Result
-  ) => void
+  listener: (params: HookParams, result: Result) => void
   options?: {
     type?: HookType | 'all'
     once?: boolean
   }
-}
-
-export type ScopeOptions = {
-  on?: (...params: Parameters<AsyncEventChannel['on']>) => void
-  emit?: (...params: Parameters<AsyncEventChannel['emit']>) => void
-  off?: (params: { type: 'on'; value: ListenersValue } | { type: 'emit'; value: TriggersValue }) => void
 }
 
 export default class AsyncEventChannel {
@@ -65,7 +58,7 @@ export default class AsyncEventChannel {
     return Object.freeze({
       id,
       has: () => map.has(id),
-      off: () => this.off(id),
+      off: () => this._off_run(id),
     })
   }
 
@@ -76,37 +69,55 @@ export default class AsyncEventChannel {
 
   private _listeners_add(value: Pick<ListenersValue, 'event' | 'listener' | 'options'>) {
     const result = this._result_gen(this._listeners)
-    this._listeners.set(result.id, { ...value, result })
-    this._hook_run('on', result.id)
+    const on = { ...value, result }
+    this._listeners.set(result.id, on)
+    this._hook_run({ type: 'on', on, emit: null })
     return result
   }
 
   private _triggers_add(value: Pick<TriggersValue, 'event' | 'params' | 'options'>) {
     const result = this._result_gen(this._triggers)
-    this._triggers.set(result.id, { ...value, result, replys: new Map() })
-    this._hook_run('emit', result.id)
+    const emit = { ...value, result, replys: new Map() }
+    this._triggers.set(result.id, emit)
+    this._hook_run({ type: 'emit', on: null, emit })
     return result
   }
 
   private async _run(listener: ListenersValue, trigger: TriggersValue) {
-    this._hook_run('trigger', listener.result.id, trigger.result.id)
-    let _result = listener.listener(trigger.params, listener.result)
+    const results = this._run_trigger(listener, trigger)
+    if (!results.length) return
+    let [result] = results
     if (listener.options?.wait) {
-      _result = await Promise.resolve(_result)
-    }
-    if (this._listeners.has(listener.result.id)) {
-      const onReply = trigger.options?.onReply
-      if (onReply) {
-        trigger.replys.set(listener.result.id, _result)
-        this._hook_run('reply', trigger.result.id, listener.result.id)
-        if (listener.options?.once) {
-          listener.result.off()
-        }
-        onReply(trigger.replys, trigger.result)
+      try {
+        result = await Promise.resolve(result)
+      } catch (err) {
+        console.error(err)
+        return
       }
+    }
+    this._run_reply(listener, trigger, result)
+  }
+
+  private _run_trigger(listener: ListenersValue, trigger: TriggersValue) {
+    this._hook_run({ type: 'trigger', on: listener, emit: trigger })
+    const results = []
+    try {
+      results.push(listener.listener(trigger.params, listener.result))
+    } catch (err) {
+      console.error(err)
     }
     if (listener.options?.once) {
       listener.result.off()
+    }
+    return results
+  }
+
+  private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: unknown) {
+    trigger.replys.set(listener.result.id, result)
+    const onReply = trigger.options?.onReply
+    if (onReply) {
+      this._hook_run({ type: 'reply', on: listener, emit: trigger })
+      onReply(trigger.replys, trigger.result)
     }
     if (trigger.options?.once) {
       trigger.result.off()
@@ -131,28 +142,26 @@ export default class AsyncEventChannel {
     triggers.forEach((trigger) => this._run(listener, trigger))
   }
 
-  private _hook_get(target: HooksValue['target'], targetId: number, sourceId?: number) {
-    const on = this._listeners.get(targetId) || (sourceId && this._listeners.get(sourceId)) || null
-    const emit = this._triggers.get(targetId) || (sourceId && this._triggers.get(sourceId)) || null
-    if (!on && !emit) return
-    const event = (on || emit)!.event
-    if (typeof target === 'number') {
-      if (targetId !== target) return
-    } else if (typeof target === 'string') {
-      if (event !== target) return
-    } else {
-      if (!target.test(event)) return
+  private _hook_has(target: HooksValue['target'], { type, on, emit }: HookParams) {
+    const value = { on, emit, off: on || emit, trigger: on, reply: emit }[type]
+    if (!value) {
+      return false
     }
-    return { on, emit }
+    if (typeof target === 'number') {
+      return value.result.id === target
+    } else if (typeof target === 'string') {
+      return value.event === target
+    } else {
+      return target.test(value.event)
+    }
   }
 
-  private _hook_run(type: HookType, targetId: number, sourceId?: number) {
+  private _hook_run(params: HookParams) {
     this._hooks.forEach(({ target, listener, options, result }) => {
       const _type = options?.type || 'all'
-      if (_type !== type && _type !== 'all') return
-      const params = this._hook_get(target, targetId, sourceId)
-      if (!params) return
-      listener({ ...params, type }, result)
+      if (_type !== params.type && _type !== 'all') return
+      if (!this._hook_has(target, params)) return
+      listener({ ...params }, result)
       if (options?.once) {
         result.off()
       }
@@ -160,7 +169,11 @@ export default class AsyncEventChannel {
   }
 
   private _off_run(id: number) {
-    this._hook_run('off', id)
+    this._hook_run({
+      type: 'off',
+      on: this._listeners.get(id) || null,
+      emit: this._triggers.get(id) || null,
+    })
     this._listeners.delete(id)
     this._triggers.delete(id)
     this._hooks.delete(id)
@@ -208,49 +221,52 @@ export default class AsyncEventChannel {
     return { on, emit, count: on + emit }
   }
 
-  useScope(options?: ScopeOptions) {
+  emit_sync(event: string, params: TriggersValue['params']) {
+    let result: unknown
+    this.emit(event, params, {
+      onReply: (replys) => {
+        result = [...replys.values()][0]
+      },
+    })
+    return result
+  }
+
+  emit_post(event: string, params: TriggersValue['params']) {
+    return new Promise((resolve) => {
+      this.emit(event, params, {
+        wait: true,
+        once: true,
+        onReply: (replys) => resolve([...replys.values()][0]),
+      })
+    })
+  }
+
+  effectScope() {
     const ids = new Set<number>()
     const { proxy, revoke } = Proxy.revocable(this, {
       get: (target, prop, receiver) => {
-        if (prop === 'on') {
-          return (...params: Parameters<AsyncEventChannel['on']>) => {
-            options?.on?.(...params)
-            const result = target.on(...params)
+        if (prop === 'on' || prop === 'emit') {
+          return (...params: Parameters<AsyncEventChannel[typeof prop]>) => {
+            const result: ReturnType<AsyncEventChannel[typeof prop]> = Reflect.apply(target[prop], target, params)
             ids.add(result.id)
             return result
-          }
-        }
-        if (prop === 'emit') {
-          return (...params: Parameters<AsyncEventChannel['emit']>) => {
-            options?.emit?.(...params)
-            const result = target.emit(...params)
-            ids.add(result.id)
-            return result
-          }
-        }
-        if (prop === '_off_run') {
-          return (id: number) => {
-            const on = target._listeners.get(id)
-            const emit = target._triggers.get(id)
-            if (on) {
-              options?.off?.({ type: 'on', value: on })
-            } else if (emit) {
-              options?.off?.({ type: 'emit', value: emit })
-            }
-            target._off_run(id)
-            if (on || emit) {
-              ids.delete(id)
-            }
           }
         }
         if (prop === 'clear') {
-          return () => ids.forEach((id) => target.off(id))
+          return () => {
+            ids.forEach((id) => target.off(id))
+            ids.clear()
+          }
         }
         if (prop === 'destroy') {
           return () => {
             ids.forEach((id) => target.off(id))
+            ids.clear()
             revoke()
           }
+        }
+        if (prop === '_ids') {
+          return ids
         }
         return Reflect.get(target, prop, receiver)
       },

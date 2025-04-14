@@ -156,7 +156,17 @@ test('异步和同步执行的on、同步执行的emit、off注销on', async () 
     ['1-on-注销:id', 1],
     ['2-on-接收:params,id', '2-emit-参数', 2],
     ['2-on-注销:id', 2],
+    ['2-emit-接收返回参数,id', [[2, '2-on-返回参数-同步']], 4],
     ['2-emit-触发:id', 4],
+
+    [
+      '2-emit-接收返回参数,id',
+      [
+        [2, '2-on-返回参数-同步'],
+        [1, '1-on-返回参数-异步'],
+      ],
+      4,
+    ],
   ])
 })
 
@@ -301,6 +311,7 @@ test('只执行一次的异步emit、只执行一次的同步和异步的on', as
     ['4-on-接收:params,id', '2-emit-参数', 5],
     ['2-emit-接收返回参数,id', [[5, '4-on-返回参数']], 6],
     ['2-emit-触发:id', 6],
+
     [
       '2-emit-接收返回参数,id',
       [
@@ -396,39 +407,39 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
       { once: true, wait: true }
     ).id,
   ])
-  const result = ctx.emit('a', '1-emit-参数', {
+  const emit_1_result = ctx.emit('a', '1-emit-参数', {
     onReply(params, { id }) {
       res.push(['1-emit-接收返回参数,id', Array.from(params), id])
     },
   })
-  res.push(['1-emit-触发:id', result.id])
+  res.push(['1-emit-触发:id', emit_1_result.id])
 
   await sleep()
 
-  result.off()
+  emit_1_result.off()
 
   await sleep(1000)
 
   jsonEq(res, [
     ['1-hook-注册:id', 1],
     ['2-hook-注册:id', 2],
-    ['1-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 1],
-    ['2-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 2],
+    ['1-hook监听:params,id', { type: 'on', on: 3, emit: null, event: 'a' }, 1],
+    ['2-hook监听:params,id', { type: 'on', on: 3, emit: null, event: 'a' }, 2],
     ['1-on-注册:id', 3],
-    ['1-hook监听:params,id', { on: 4, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 4, emit: null, event: 'a' }, 1],
     ['2-on-注册:id', 4],
 
-    ['1-hook监听:params,id', { on: null, emit: 5, type: 'emit', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 3, emit: 5, type: 'trigger', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'emit', on: null, emit: 5, event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'trigger', on: 3, emit: 5, event: 'a' }, 1],
     ['1-on-接收:params,id', '1-emit-参数', 3],
-    ['1-hook监听:params,id', { on: 3, emit: 5, type: 'reply', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'reply', on: 3, emit: 5, event: 'a' }, 1],
     ['1-emit-接收返回参数,id', [[3, '1-on-返回参数-同步']], 5],
-    ['1-hook监听:params,id', { on: 4, emit: 5, type: 'trigger', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'trigger', on: 4, emit: 5, event: 'a' }, 1],
     ['2-on-接收:params,id', '1-emit-参数', 4],
+    ['1-hook监听:params,id', { type: 'off', on: 4, emit: null, event: 'a' }, 1],
     ['1-emit-触发:id', 5],
-    ['1-hook监听:params,id', { on: 4, emit: 5, type: 'reply', event: 'a' }, 1],
 
-    ['1-hook监听:params,id', { on: 4, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'reply', on: 4, emit: 5, event: 'a' }, 1],
     [
       '1-emit-接收返回参数,id',
       [
@@ -437,91 +448,99 @@ test('hook监听单个/批量/全部、只监听一次', async () => {
       ],
       5,
     ],
-    ['1-hook监听:params,id', { on: null, emit: 5, type: 'off', event: 'a' }, 1],
+
+    ['1-hook监听:params,id', { type: 'off', on: null, emit: 5, event: 'a' }, 1],
   ])
 })
 
-test('useScope收集off、审核on/emit/off', async () => {
+test('emit_sync同步获取单个返回参数', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
 
-  const scope = ctx.useScope({
-    on: (event) => {
-      if (event === 'a') {
-        throw new Error('on-阻止注册')
-      }
-    },
-    emit: (event) => {
-      if (event === 'c') {
-        throw new Error('emit-阻止注册')
-      }
-    },
-    off: (params) => {
-      const event = params[params.type]!.event
-      if (event === 'b') {
-        throw new Error('off-阻止注销')
-      }
-    },
-  })
-
-  expect(() => {
-    res.push(['1-on-注册:id', scope.on('a', () => {}).id])
-  }).toThrow()
-  res.push(['2-on-注册:id', scope.on('b', () => {}).id])
-  res.push(['3-on-注册:id', ctx.on('b', () => {}).id])
-
-  expect(() => {
-    res.push(['1-emit-触发:id', scope.emit('c', null, { wait: true }).id])
-  }).toThrow()
-  res.push(['2-emit-触发:id', scope.emit('d', null, { wait: true }).id])
-  res.push(['3-emit-触发:id', ctx.emit('d', null, { wait: true }).id])
-
-  expect(() => {
-    res.push(['1-off-注销:事件,类型', 'b', 'on', scope.off('b', 'on')])
-  }).toThrow()
-
-  res.push(['1-size:事件,数量', 'a', scope.size('a'), 'b', scope.size('b'), 'c', scope.size('c'), 'd', scope.size('d')])
-
-  res.push(['1-scope-销毁', scope.destroy()])
-  res.push(['2-size:事件,数量', 'a', ctx.size('a'), 'b', ctx.size('b'), 'c', ctx.size('c'), 'd', ctx.size('d')])
+  res.push(['1-emit_sync-触发:返回参数', ctx.emit_sync('a', '1-emit_sync-参数')])
+  res.push([
+    '1-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      return '1-on-返回参数'
+    }).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['2-on-接收:params,id', params, id])
+      return '2-on-返回参数'
+    }).id,
+  ])
+  res.push(['2-emit_sync-触发:返回参数', ctx.emit_sync('a', '2-emit_sync-参数')])
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
 
   jsonEq(res, [
-    ['2-on-注册:id', 1],
-    ['3-on-注册:id', 2],
-    ['2-emit-触发:id', 3],
-    ['3-emit-触发:id', 4],
-    [
-      '1-size:事件,数量',
-      'a',
-      { on: 0, emit: 0, count: 0 },
-      'b',
-      { on: 2, emit: 0, count: 2 },
-      'c',
-      { on: 0, emit: 0, count: 0 },
-      'd',
-      { on: 0, emit: 2, count: 2 },
-    ],
-    ['1-scope-销毁', undefined],
-    [
-      '2-size:事件,数量',
-      'a',
-      { on: 0, emit: 0, count: 0 },
-      'b',
-      { on: 1, emit: 0, count: 1 },
-      'c',
-      { on: 0, emit: 0, count: 0 },
-      'd',
-      { on: 0, emit: 1, count: 1 },
-    ],
+    ['1-emit_sync-触发:返回参数', undefined],
+    ['1-on-注册:id', 2],
+    ['2-on-注册:id', 3],
+    ['1-on-接收:params,id', '2-emit_sync-参数', 2],
+    ['2-on-接收:params,id', '2-emit_sync-参数', 3],
+    ['2-emit_sync-触发:返回参数', '1-on-返回参数'],
+    ['1-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
   ])
 })
 
-test('useScope多层嵌套', async () => {
+test('emit_post异步获取单个返回参数', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
 
-  const scope1 = ctx.useScope()
-  const scope2 = scope1.useScope()
+  ctx.emit_post('a', '1-emit_post-参数').then((params) => {
+    res.push(['1-emit_post-接收返回参数', params])
+  })
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      return '1-on-返回参数'
+    }).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['2-on-接收:params,id', params, id])
+      return '2-on-返回参数'
+    }).id,
+  ])
+
+  await sleep()
+
+  ctx.emit_post('a', '2-emit_post-参数').then((params) => {
+    res.push(['2-emit_post-接收返回参数', params])
+  })
+
+  await sleep()
+
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+
+  await sleep(1000)
+
+  jsonEq(res, [
+    ['1-on-接收:params,id', '1-emit_post-参数', 2],
+    ['1-on-注册:id', 2],
+    ['2-on-注册:id', 3],
+    ['1-emit_post-接收返回参数', '1-on-返回参数'],
+
+    ['1-on-接收:params,id', '2-emit_post-参数', 2],
+    ['2-on-接收:params,id', '2-emit_post-参数', 3],
+    ['2-emit_post-接收返回参数', '1-on-返回参数'],
+
+    ['1-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
+  ])
+})
+
+test('effectScope收集off、多层嵌套', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  const scope1 = ctx.effectScope()
+  const scope2 = scope1.effectScope()
 
   res.push([
     '1-hook-注册:id',
@@ -545,25 +564,73 @@ test('useScope多层嵌套', async () => {
 
   jsonEq(res, [
     ['1-hook-注册:id', 1],
-    ['1-hook监听:params,id', { on: 2, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 2, emit: null, event: 'a' }, 1],
     ['1-on-注册:id', 2],
-    ['1-hook监听:params,id', { on: 3, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 3, emit: null, event: 'a' }, 1],
     ['2-on-注册:id', 3],
-    ['1-hook监听:params,id', { on: 4, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 4, emit: null, event: 'a' }, 1],
     ['3-on-注册:id', 4],
     ['1-size:事件,数量', 'a', { on: 3, emit: 0, count: 3 }],
 
-    ['1-hook监听:params,id', { on: 4, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: 4, emit: null, event: 'a' }, 1],
     ['1-clear-清空', 'scope2', undefined],
     ['2-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
-    ['1-hook监听:params,id', { on: 5, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 5, emit: null, event: 'a' }, 1],
     ['4-on-注册:id', 5],
     ['3-size:事件,数量', 'a', { on: 3, emit: 0, count: 3 }],
 
-    ['1-hook监听:params,id', { on: 3, emit: null, type: 'off', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 5, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: 3, emit: null, event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: 5, emit: null, event: 'a' }, 1],
     ['1-destroy-销毁', 'scope1', undefined],
     ['4-size:事件,数量', 'a', { on: 1, emit: 0, count: 1 }],
+  ])
+})
+
+test('effectScope中的emit_sync和emit_post', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  const scope = ctx.effectScope()
+
+  res.push([
+    '1-on-注册:id',
+    scope.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      return '1-on-返回参数'
+    }).id,
+  ])
+  res.push(['1-emit_sync-触发:返回参数', scope.emit_sync('a', '1-emit_sync-参数')])
+  // @ts-expect-error
+  res.push(['1-scope:ids', [...scope._ids]])
+
+  scope.emit_post('a', '2-emit_post-参数').then((params) => {
+    res.push(['2-emit_post-接收返回参数', params])
+  })
+
+  await sleep()
+
+  // @ts-expect-error
+  res.push(['1-scope:ids', [...scope._ids]])
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+  res.push(['1-clear-清空', 'scope2', scope.clear()])
+  // @ts-expect-error
+  res.push(['1-scope:ids', [...scope._ids]])
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+
+  jsonEq(res, [
+    ['1-on-注册:id', 1],
+    ['1-on-接收:params,id', '1-emit_sync-参数', 1],
+    ['1-emit_sync-触发:返回参数', '1-on-返回参数'],
+    ['1-scope:ids', [1, 2]],
+
+    ['1-on-接收:params,id', '2-emit_post-参数', 1],
+    ['2-emit_post-接收返回参数', '1-on-返回参数'],
+
+    ['1-scope:ids', [1, 2, 3]],
+    ['1-size:事件,数量', 'a', { on: 1, emit: 0, count: 1 }],
+    ['1-clear-清空', 'scope2', undefined],
+    ['1-scope:ids', []],
+    ['1-size:事件,数量', 'a', { on: 0, emit: 0, count: 0 }],
   ])
 })
 
@@ -625,28 +692,28 @@ test('on/emit的once执行顺序', async () => {
 
   jsonEq(res, [
     ['1-hook-注册:id', 1],
-    ['1-hook监听:params,id', { on: 2, emit: null, type: 'on', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 2, emit: null, event: 'a' }, 1],
     ['1-on-注册:id', 2],
-    ['1-hook监听:params,id', { on: null, emit: 3, type: 'emit', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 2, emit: 3, type: 'trigger', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'emit', on: null, emit: 3, event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'trigger', on: 2, emit: 3, event: 'a' }, 1],
     ['1-on-接收:params,id', '1-emit-参数', 2],
-    ['1-hook监听:params,id', { on: 2, emit: 3, type: 'reply', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 2, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: 2, emit: null, event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'reply', on: 2, emit: 3, event: 'a' }, 1],
     ['1-emit-接收返回参数,id', [[2, '1-on-返回参数']], 3],
-    ['1-hook监听:params,id', { on: null, emit: 3, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: null, emit: 3, event: 'a' }, 1],
     ['1-emit-触发:id', 3],
 
-    ['1-hook监听:params,id', { on: null, emit: 4, type: 'emit', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'emit', on: null, emit: 4, event: 'a' }, 1],
     ['2-emit-触发:id', 4],
-    ['1-hook监听:params,id', { on: 5, emit: null, type: 'on', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 5, emit: 4, type: 'trigger', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'on', on: 5, emit: null, event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'trigger', on: 5, emit: 4, event: 'a' }, 1],
     ['2-on-接收:params,id', '2-emit-参数', 5],
+    ['1-hook监听:params,id', { type: 'off', on: 5, emit: null, event: 'a' }, 1],
     ['2-on-注册:id', 5],
 
-    ['1-hook监听:params,id', { on: 5, emit: 4, type: 'reply', event: 'a' }, 1],
-    ['1-hook监听:params,id', { on: 5, emit: null, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'reply', on: 5, emit: 4, event: 'a' }, 1],
     ['2-emit-接收返回参数,id', [[5, '2-on-返回参数']], 4],
-    ['1-hook监听:params,id', { on: null, emit: 4, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: null, emit: 4, event: 'a' }, 1],
   ])
 })
 
@@ -675,7 +742,95 @@ test('emit同步执行、hook监听id', async () => {
 
   jsonEq(res, [
     ['1-hook-注册:id', 1],
-    ['1-hook监听:params,id', { on: null, emit: 2, type: 'off', event: 'a' }, 1],
+    ['1-hook监听:params,id', { type: 'off', on: null, emit: 2, event: 'a' }, 1],
     ['1-emit-触发:id', 2],
+  ])
+})
+
+test('同步on返回throw', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      throw new Error('1-on-返回参数-throw')
+    }).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['2-on-接收:params,id', params, id])
+      return '2-on-返回参数'
+    }).id,
+  ])
+  res.push([
+    '1-emit-触发:id',
+    ctx.emit('a', '1-emit-参数', {
+      onReply(params, { id }) {
+        res.push(['1-emit-接收返回参数,id', Array.from(params), id])
+      },
+    }).id,
+  ])
+
+  await sleep()
+
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+
+  jsonEq(res, [
+    ['1-on-注册:id', 1],
+    ['2-on-注册:id', 2],
+    ['1-on-接收:params,id', '1-emit-参数', 1],
+    ['2-on-接收:params,id', '1-emit-参数', 2],
+    ['1-emit-接收返回参数,id', [[2, '2-on-返回参数']], 3],
+    ['1-emit-触发:id', 3],
+    ['1-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
+  ])
+})
+
+test('异步on返回reject', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on(
+      'a',
+      async (params, { id }) => {
+        res.push(['1-on-接收:params,id', params, id])
+        return Promise.reject('1-on-返回参数-异步-reject')
+      },
+      { wait: true }
+    ).id,
+  ])
+  res.push([
+    '2-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['2-on-接收:params,id', params, id])
+      return '2-on-返回参数-同步'
+    }).id,
+  ])
+  res.push([
+    '1-emit-触发:id',
+    ctx.emit('a', '1-emit-参数', {
+      onReply(params, { id }) {
+        res.push(['1-emit-接收返回参数,id', Array.from(params), id])
+      },
+    }).id,
+  ])
+
+  await sleep()
+
+  res.push(['1-size:事件,数量', 'a', ctx.size('a')])
+
+  jsonEq(res, [
+    ['1-on-注册:id', 1],
+    ['2-on-注册:id', 2],
+    ['1-on-接收:params,id', '1-emit-参数', 1],
+    ['2-on-接收:params,id', '1-emit-参数', 2],
+    ['1-emit-接收返回参数,id', [[2, '2-on-返回参数-同步']], 3],
+    ['1-emit-触发:id', 3],
+    ['1-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
   ])
 })

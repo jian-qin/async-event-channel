@@ -22,7 +22,11 @@ npm install async-event-channel
 
 - `size` Get the number of currently registered `on` or pending `emit`
 
-- `useScope` Event communication scope
+- `emit_sync` Synchronously trigger events and return results
+
+- `emit_post` Asynchronously trigger events and return results
+
+- `effectScope` Collect registered and cached events
 
 ## Two-way communication
 

@@ -22,7 +22,11 @@ npm install async-event-channel
 
 - `size` 获取当前注册的 `on` 或 等待的 `emit` 的数量
 
-- `useScope` 事件通信的作用域
+- `emit_sync` 同步触发事件并返回结果
+
+- `emit_post` 异步触发事件并返回结果
+
+- `effectScope` 收集注册和缓存的事件
 
 ## 双向通信
 
