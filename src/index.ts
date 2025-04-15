@@ -185,7 +185,7 @@ export default class AsyncEventChannel {
     return result
   }
 
-  emit(event: string, params: TriggersValue['params'], options?: TriggersValue['options']) {
+  emit(event: string, params?: TriggersValue['params'], options?: TriggersValue['options']) {
     const result = this._triggers_add({ event, params, options })
     this._on_run(result.id)
     return result
@@ -221,7 +221,7 @@ export default class AsyncEventChannel {
     return { on, emit, count: on + emit }
   }
 
-  emit_sync(event: string, params: TriggersValue['params']) {
+  emit_sync(event: string, params?: TriggersValue['params']) {
     let result: unknown
     this.emit(event, params, {
       onReply: (replys) => {
@@ -231,7 +231,7 @@ export default class AsyncEventChannel {
     return result
   }
 
-  emit_post(event: string, params: TriggersValue['params']) {
+  emit_post(event: string, params?: TriggersValue['params']) {
     return new Promise((resolve) => {
       this.emit(event, params, {
         wait: true,
