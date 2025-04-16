@@ -112,7 +112,7 @@ export default class AsyncEventChannel {
     return results
   }
 
-  private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: any) {
+  private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: ReturnType<ListenersValue['listener']>) {
     trigger.replys.set(listener.result.id, result)
     const onReply = trigger.options?.onReply
     if (onReply) {
@@ -222,7 +222,7 @@ export default class AsyncEventChannel {
   }
 
   emit_sync(event: string, params?: TriggersValue['params']) {
-    let result: any
+    let result: ReturnType<ListenersValue['listener']> | undefined
     this.emit(event, params, {
       onReply: (replys) => {
         result = [...replys.values()][0]
@@ -231,8 +231,8 @@ export default class AsyncEventChannel {
     return result
   }
 
-  emit_post(event: string, params?: TriggersValue['params']) {
-    return new Promise((resolve) => {
+  emit_post<T = any>(event: string, params?: TriggersValue['params']) {
+    return new Promise<T>((resolve) => {
       this.emit(event, params, {
         wait: true,
         once: true,

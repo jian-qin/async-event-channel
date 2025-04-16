@@ -2,9 +2,11 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-> Event channel, supports many-to-many communication, bidirectional communication, bidirectional asynchronous communication, hook listening, agent instance unified logout and other functions.
+**Bidirectional asynchronous communication**
 
-> Tries to cover most of the unit test cases, supports `ts` and `js`, supports `node` and `browser`.
+> Features: emit can wait for multiple on registration, and can receive on the return value of their callback functions, but also wait for the return value of the Promise results and then receive.
+
+> Lightweight, no dependencies, support for `ts` and `js`, support for `node` and `browser`, support for many-to-many communication, bidirectional asynchronous communication, hooks to listen, unified cancellation of proxy instances, etc. Try to cover most of the unit test cases.
 
 ## Install
 
