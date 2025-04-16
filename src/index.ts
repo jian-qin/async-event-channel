@@ -12,7 +12,7 @@ export type Result = Readonly<{
 export type ListenersValue = {
   event: string
   result: Result
-  listener: (params: unknown, result: Result) => unknown
+  listener: (params: any, result: Result) => any
   options?: {
     wait?: boolean
     once?: boolean
@@ -21,9 +21,9 @@ export type ListenersValue = {
 
 export type TriggersValue = {
   event: string
-  params: unknown
+  params: any
   result: Result
-  replys: Map<number, unknown>
+  replys: Map<number, any>
   options?: {
     wait?: boolean
     once?: boolean
@@ -112,7 +112,7 @@ export default class AsyncEventChannel {
     return results
   }
 
-  private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: unknown) {
+  private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: any) {
     trigger.replys.set(listener.result.id, result)
     const onReply = trigger.options?.onReply
     if (onReply) {
@@ -222,7 +222,7 @@ export default class AsyncEventChannel {
   }
 
   emit_sync(event: string, params?: TriggersValue['params']) {
-    let result: unknown
+    let result: any
     this.emit(event, params, {
       onReply: (replys) => {
         result = [...replys.values()][0]
