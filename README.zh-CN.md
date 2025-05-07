@@ -154,6 +154,20 @@ ctx.emit('test', '传递参数', {
 })
 ```
 
+### 捕获异常
+
+```ts
+ctx.on('test', () => {
+  throw '抛出异常'
+})
+
+ctx.emit('test', null, {
+  onCatch(params) {
+    console.log('捕获抛出的异常：', params) // 捕获抛出的异常： Map(1) { 1 => '抛出异常' }
+  },
+})
+```
+
 ### 多个注册/触发事件
 
 ```ts

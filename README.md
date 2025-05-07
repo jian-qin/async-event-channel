@@ -154,6 +154,20 @@ ctx.emit('test', 'Transmit parameters', {
 })
 ```
 
+### Catching exceptions
+
+```ts
+ctx.on('test', () => {
+  throw 'Throw an exception'
+})
+
+ctx.emit('test', null, {
+  onCatch(params) {
+    console.log('Catch thrown exceptions:', params) // Catch thrown exceptions: Map(1) { 1 => 'Throw an exception' }
+  },
+})
+```
+
 ### Multiple registered/triggered events
 
 ```ts
