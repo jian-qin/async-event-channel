@@ -535,6 +535,30 @@ test('emit_post异步获取单个返回参数', async () => {
   ])
 })
 
+test('emit_post捕获异常', async () => {
+  const ctx = new AsyncEventChannel()
+  const res: unknown[] = []
+
+  res.push([
+    '1-on-注册:id',
+    ctx.on('a', (params, { id }) => {
+      res.push(['1-on-接收:params,id', params, id])
+      throw '1-on-返回参数-异常'
+    }).id,
+  ])
+  ctx.emit_post('a', '1-emit_post-参数').catch((err) => {
+    res.push(['1-emit_post-捕获异常', err])
+  })
+
+  await sleep()
+
+  jsonEq(res, [
+    ['1-on-注册:id', 1],
+    ['1-on-接收:params,id', '1-emit_post-参数', 1],
+    ['1-emit_post-捕获异常', '1-on-返回参数-异常'],
+  ])
+})
+
 test('effectScope收集off、多层嵌套', async () => {
   const ctx = new AsyncEventChannel()
   const res: unknown[] = []
@@ -755,7 +779,7 @@ test('同步on返回throw', async () => {
     '1-on-注册:id',
     ctx.on('a', (params, { id }) => {
       res.push(['1-on-接收:params,id', params, id])
-      throw new Error('1-on-返回参数-throw')
+      throw '1-on-返回参数-throw'
     }).id,
   ])
   res.push([
@@ -771,6 +795,9 @@ test('同步on返回throw', async () => {
       onReply(params, { id }) {
         res.push(['1-emit-接收返回参数,id', Array.from(params), id])
       },
+      onCatch(params, { id }) {
+        res.push(['1-emit-接收错误:id', Array.from(params), id])
+      },
     }).id,
   ])
 
@@ -782,6 +809,7 @@ test('同步on返回throw', async () => {
     ['1-on-注册:id', 1],
     ['2-on-注册:id', 2],
     ['1-on-接收:params,id', '1-emit-参数', 1],
+    ['1-emit-接收错误:id', [[1, '1-on-返回参数-throw']], 3],
     ['2-on-接收:params,id', '1-emit-参数', 2],
     ['1-emit-接收返回参数,id', [[2, '2-on-返回参数']], 3],
     ['1-emit-触发:id', 3],
@@ -817,6 +845,9 @@ test('异步on返回reject', async () => {
       onReply(params, { id }) {
         res.push(['1-emit-接收返回参数,id', Array.from(params), id])
       },
+      onCatch(params, { id }) {
+        res.push(['1-emit-接收错误:id', Array.from(params), id])
+      },
     }).id,
   ])
 
@@ -831,6 +862,8 @@ test('异步on返回reject', async () => {
     ['2-on-接收:params,id', '1-emit-参数', 2],
     ['1-emit-接收返回参数,id', [[2, '2-on-返回参数-同步']], 3],
     ['1-emit-触发:id', 3],
+    ['1-emit-接收错误:id', [[1, '1-on-返回参数-异步-reject']], 3],
+
     ['1-size:事件,数量', 'a', { on: 2, emit: 0, count: 2 }],
   ])
 })

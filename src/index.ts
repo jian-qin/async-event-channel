@@ -1,7 +1,7 @@
 type Maps = Map<number, ListenersValue> | Map<number, TriggersValue> | Map<number, HooksValue>
 
 export type Target = string | number | RegExp
-export type HookType = 'on' | 'emit' | 'off' | 'trigger' | 'reply'
+export type HookType = 'on' | 'emit' | 'off' | 'trigger' | 'reply' | 'catch'
 
 export type Result = Readonly<{
   id: number
@@ -24,10 +24,12 @@ export type TriggersValue = {
   params: any
   result: Result
   replys: Map<number, any>
+  catchs: Map<number, any>
   options?: {
     wait?: boolean
     once?: boolean
     onReply?: (params: TriggersValue['replys'], result: Result) => void
+    onCatch?: (params: TriggersValue['catchs'], result: Result) => void
   }
 }
 
@@ -77,39 +79,36 @@ export default class AsyncEventChannel {
 
   private _triggers_add(value: Pick<TriggersValue, 'event' | 'params' | 'options'>) {
     const result = this._result_gen(this._triggers)
-    const emit = { ...value, result, replys: new Map() }
+    const emit = { ...value, result, replys: new Map(), catchs: new Map() }
     this._triggers.set(result.id, emit)
     this._hook_run({ type: 'emit', on: null, emit })
     return result
   }
 
   private async _run(listener: ListenersValue, trigger: TriggersValue) {
-    const results = this._run_trigger(listener, trigger)
-    if (!results.length) return
-    let [result] = results
-    if (listener.options?.wait) {
-      try {
+    try {
+      let result = this._run_trigger(listener, trigger)
+      if (listener.options?.wait) {
         result = await Promise.resolve(result)
-      } catch (err) {
-        console.error(err)
-        return
       }
+      this._run_reply(listener, trigger, result)
+    } catch (err) {
+      this._run_catch(listener, trigger, err)
     }
-    this._run_reply(listener, trigger, result)
+    if (trigger.options?.once) {
+      trigger.result.off()
+    }
   }
 
   private _run_trigger(listener: ListenersValue, trigger: TriggersValue) {
     this._hook_run({ type: 'trigger', on: listener, emit: trigger })
-    const results = []
     try {
-      results.push(listener.listener(trigger.params, listener.result))
-    } catch (err) {
-      console.error(err)
+      return listener.listener(trigger.params, listener.result)
+    } finally {
+      if (listener.options?.once) {
+        listener.result.off()
+      }
     }
-    if (listener.options?.once) {
-      listener.result.off()
-    }
-    return results
   }
 
   private _run_reply(listener: ListenersValue, trigger: TriggersValue, result: ReturnType<ListenersValue['listener']>) {
@@ -119,8 +118,14 @@ export default class AsyncEventChannel {
       this._hook_run({ type: 'reply', on: listener, emit: trigger })
       onReply(trigger.replys, trigger.result)
     }
-    if (trigger.options?.once) {
-      trigger.result.off()
+  }
+
+  private _run_catch(listener: ListenersValue, trigger: TriggersValue, err: any) {
+    trigger.catchs.set(listener.result.id, err)
+    const onCatch = trigger.options?.onCatch
+    if (onCatch) {
+      this._hook_run({ type: 'catch', on: listener, emit: trigger })
+      onCatch(trigger.catchs, trigger.result)
     }
   }
 
@@ -143,7 +148,7 @@ export default class AsyncEventChannel {
   }
 
   private _hook_has(target: HooksValue['target'], { type, on, emit }: HookParams) {
-    const value = { on, emit, off: on || emit, trigger: on, reply: emit }[type]
+    const value = { on, emit, off: on || emit, trigger: on, reply: emit, catch: emit }[type]
     if (!value) {
       return false
     }
@@ -232,11 +237,12 @@ export default class AsyncEventChannel {
   }
 
   emit_post<T = any>(event: string, params?: TriggersValue['params']) {
-    return new Promise<T>((resolve) => {
+    return new Promise<T>((resolve, reject) => {
       this.emit(event, params, {
         wait: true,
         once: true,
         onReply: (replys) => resolve([...replys.values()][0]),
+        onCatch: (catchs) => reject([...catchs.values()][0]),
       })
     })
   }
